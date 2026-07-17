@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import models  # noqa: F401 -- registers models on Base.metadata
 from backend.database.session import SessionLocal
 from backend.gamification.badges import ensure_badges_seeded
-from backend.routers import notes, tasks, journal, gamification
+from backend.routers import notes, tasks, journal, gamification, projects, search, graph
 
 app = FastAPI(title="Stud-OS API", version="0.2.0")
 
@@ -20,6 +20,9 @@ app.include_router(notes.router)
 app.include_router(tasks.router)
 app.include_router(journal.router)
 app.include_router(gamification.router)
+app.include_router(projects.router)
+app.include_router(search.router)
+app.include_router(graph.router)
 
 
 @app.on_event("startup")

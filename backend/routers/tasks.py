@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.database.session import get_db
-from backend.database.models.tasks import Task, TaskStatus
+from backend.database.models.tasks import Task, TaskStatus, Subtask
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.tasks import TaskCreate, TaskUpdate, TaskOut, TaskCompleteResponse, GamificationEventOut
+from backend.schemas.projects import SubtaskCreate, SubtaskUpdate, SubtaskOut
 from backend.gamification.engine import on_task_completed
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -89,3 +90,42 @@ def complete_task(task_id: str, db: Session = Depends(get_db), user: User = Depe
             newly_awarded_badges=result.newly_awarded_badges,
         ),
     )
+
+
+@router.get("/{task_id}/subtasks", response_model=list[SubtaskOut])
+def list_subtasks(task_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _get_task_or_404(db, task_id, user)
+    return db.query(Subtask).filter(Subtask.task_id == task_id).order_by(Subtask.created_at).all()
+
+
+@router.post("/{task_id}/subtasks", response_model=SubtaskOut, status_code=201)
+def create_subtask(
+    task_id: str, payload: SubtaskCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    _get_task_or_404(db, task_id, user)
+    subtask = Subtask(task_id=task_id, title=payload.title)
+    db.add(subtask)
+    db.commit()
+    db.refresh(subtask)
+    return subtask
+
+
+@router.patch("/subtasks/{subtask_id}", response_model=SubtaskOut)
+def update_subtask(subtask_id: str, payload: SubtaskUpdate, db: Session = Depends(get_db)):
+    subtask = db.query(Subtask).filter(Subtask.id == subtask_id).first()
+    if subtask is None:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(subtask, field, value)
+    db.commit()
+    db.refresh(subtask)
+    return subtask
+
+
+@router.delete("/subtasks/{subtask_id}", status_code=204)
+def delete_subtask(subtask_id: str, db: Session = Depends(get_db)):
+    subtask = db.query(Subtask).filter(Subtask.id == subtask_id).first()
+    if subtask is None:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    db.delete(subtask)
+    db.commit()
