@@ -1,4 +1,22 @@
+from datetime import date
+
 from pydantic import BaseModel, ConfigDict
+
+
+class LevelOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    current_level: int
+    current_xp: int
+
+
+class StreakOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    streak_type: str
+    current_count: int
+    longest_count: int
+    last_active_date: date | None
 
 
 class BadgeOut(BaseModel):
@@ -9,17 +27,7 @@ class BadgeOut(BaseModel):
     icon: str
 
 
-class StreakOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    streak_type: str
-    current_count: int
-    longest_count: int
-
-
-class GamificationProfileOut(BaseModel):
-    current_level: int
-    current_xp: int
-    xp_to_next_level: int
+class ProfileOut(BaseModel):
+    level: LevelOut
     streaks: list[StreakOut]
     badges: list[BadgeOut]

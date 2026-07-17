@@ -44,11 +44,6 @@ def create_entry(
     return entry
 
 
-@router.get("/{entry_id}", response_model=JournalEntryOut)
-def get_entry(entry_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return _get_entry_or_404(db, entry_id, user)
-
-
 @router.patch("/{entry_id}", response_model=JournalEntryOut)
 def update_entry(
     entry_id: str,
