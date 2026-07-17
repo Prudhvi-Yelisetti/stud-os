@@ -129,6 +129,21 @@ def create_chapter(
     return ch
 
 
+@router.get("/chapters/recent", response_model=list[ChapterOut])
+def list_recent_chapters(
+    limit: int = 10, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """Most recently updated chapters across all of the user's notebooks (Dashboard widget)."""
+    return (
+        db.query(Chapter)
+        .join(Notebook, Notebook.id == Chapter.notebook_id)
+        .filter(Notebook.user_id == user.id, Chapter.is_trashed.is_(False))
+        .order_by(Chapter.updated_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 @router.get("/chapters/{chapter_id}", response_model=ChapterOut)
 def get_chapter(chapter_id: str, db: Session = Depends(get_db)):
     return _get_chapter_or_404(db, chapter_id)

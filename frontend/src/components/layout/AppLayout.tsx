@@ -1,10 +1,14 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import { GamificationWidget } from '../gamification/GamificationWidget'
+import { GlobalSearch } from '../search/GlobalSearch'
 
 const navItems = [
-  { to: '/', label: 'Notes' },
+  { to: '/', label: 'Dashboard' },
+  { to: '/notes', label: 'Notes' },
   { to: '/tasks', label: 'Tasks' },
   { to: '/journal', label: 'Journal' },
+  { to: '/projects', label: 'Projects' },
+  { to: '/graph', label: 'Graph' },
 ]
 
 export function AppLayout() {
@@ -17,6 +21,7 @@ export function AppLayout() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === '/'}
               className={({ isActive }) =>
                 `rounded px-3 py-2 text-sm ${
                   isActive ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-900'
@@ -29,9 +34,14 @@ export function AppLayout() {
         </nav>
         <GamificationWidget />
       </aside>
-      <main className="flex-1 overflow-hidden">
-        <Outlet />
-      </main>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex shrink-0 items-center justify-end border-b border-neutral-800 px-4 py-2">
+          <GlobalSearch />
+        </header>
+        <main className="flex-1 overflow-hidden">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

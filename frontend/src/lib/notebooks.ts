@@ -16,4 +16,6 @@ export const notebooksApi = {
     api.patch<Chapter>(`/notebooks/chapters/${chapterId}`, data).then((r) => r.data),
   getBacklinks: (chapterId: string) =>
     api.get<Backlink[]>(`/notebooks/chapters/${chapterId}/backlinks`).then((r) => r.data),
+  listRecentChapters: (limit = 5) =>
+    api.get<Chapter[]>('/notebooks/chapters/recent', { params: { limit } }).then((r) => r.data),
 }

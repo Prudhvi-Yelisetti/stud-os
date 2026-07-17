@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tasksApi } from '../../lib/tasks'
+import { projectsApi } from '../../lib/projects'
 import type { Task, TaskStatus, TaskPriority } from '../../lib/api'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -20,17 +21,20 @@ const PRIORITY_COLOR: Record<TaskPriority, string> = {
 export function KanbanBoard() {
   const queryClient = useQueryClient()
   const [newTitle, setNewTitle] = useState('')
+  const [newProjectId, setNewProjectId] = useState('')
   const [levelUpMessage, setLevelUpMessage] = useState<string | null>(null)
 
   const { data: tasks } = useQuery({ queryKey: ['tasks'], queryFn: () => tasksApi.list() })
+  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list })
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['tasks'] })
     queryClient.invalidateQueries({ queryKey: ['gamification-profile'] })
+    queryClient.invalidateQueries({ queryKey: ['project-tasks'] })
   }
 
   const createTask = useMutation({
-    mutationFn: (title: string) => tasksApi.create({ title }),
+    mutationFn: (title: string) => tasksApi.create({ title, project_id: newProjectId || undefined }),
     onSuccess: invalidate,
   })
 
@@ -79,6 +83,18 @@ export function KanbanBoard() {
           placeholder="New task..."
           className="w-72 rounded bg-neutral-900 px-3 py-2 text-sm outline-none placeholder:text-neutral-600"
         />
+        <select
+          value={newProjectId}
+          onChange={(e) => setNewProjectId(e.target.value)}
+          className="rounded bg-neutral-900 px-2 py-2 text-sm text-neutral-400 outline-none"
+        >
+          <option value="">No project</option>
+          {projects?.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.title}
+            </option>
+          ))}
+        </select>
       </form>
       <div className="grid flex-1 grid-cols-4 gap-4 overflow-hidden">
         {COLUMNS.map((col) => (

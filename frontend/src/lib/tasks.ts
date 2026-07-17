@@ -3,7 +3,7 @@ import { api, type Task, type TaskStatus, type TaskPriority, type GamificationEv
 export const tasksApi = {
   list: (status?: TaskStatus) =>
     api.get<Task[]>('/tasks', { params: status ? { status } : {} }).then((r) => r.data),
-  create: (data: { title: string; priority?: TaskPriority; description?: string }) =>
+  create: (data: { title: string; priority?: TaskPriority; description?: string; project_id?: string }) =>
     api.post<Task>('/tasks', data).then((r) => r.data),
   update: (id: string, data: Partial<Pick<Task, 'title' | 'status' | 'priority' | 'description'>>) =>
     api.patch<Task>(`/tasks/${id}`, data).then((r) => r.data),

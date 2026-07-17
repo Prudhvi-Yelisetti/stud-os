@@ -93,3 +93,43 @@ export interface GamificationProfile {
   streaks: Streak[]
   badges: Badge[]
 }
+
+export interface Project {
+  id: string
+  title: string
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Subtask {
+  id: string
+  task_id: string
+  title: string
+  done: boolean
+}
+
+export interface SearchResult {
+  type: 'chapter' | 'notebook' | 'task' | 'journal'
+  id: string
+  title: string
+  snippet: string | null
+}
+
+export interface GraphNode {
+  id: string
+  type: 'notebook' | 'chapter' | 'task' | 'project' | 'journal'
+  label: string
+  parent_id: string | null
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  kind: 'contains' | 'wiki_link' | 'belongs_to'
+}
+
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
