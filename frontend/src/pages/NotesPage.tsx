@@ -24,7 +24,7 @@ export function NotesPage() {
         </div>
       )}
       {chapterId ? (
-        <ChapterEditor chapterId={chapterId} />
+        <ChapterEditor chapterId={chapterId} onDeleted={() => setChapterId(null)} />
       ) : (
         <div className="flex-1 p-6 text-sm text-neutral-600">Select a chapter to start writing</div>
       )}

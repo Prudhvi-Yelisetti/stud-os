@@ -4,6 +4,9 @@ export const projectsApi = {
   list: () => api.get<Project[]>('/projects').then((r) => r.data),
   create: (data: { title: string; description?: string }) =>
     api.post<Project>('/projects', data).then((r) => r.data),
+  update: (id: string, data: Partial<Pick<Project, 'title' | 'description'>>) =>
+    api.patch<Project>(`/projects/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/projects/${id}`),
   listTasks: (projectId: string) =>
     api.get<Task[]>(`/projects/${projectId}/tasks`).then((r) => r.data),
 }

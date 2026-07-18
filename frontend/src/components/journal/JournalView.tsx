@@ -18,8 +18,14 @@ export function JournalView() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [mood, setMood] = useState<Mood>('okay')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editContent, setEditContent] = useState('')
+  const [editMood, setEditMood] = useState<Mood>('okay')
 
   const { data: entries } = useQuery({ queryKey: ['journal'], queryFn: journalApi.list })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['journal'] })
 
   const createEntry = useMutation({
     mutationFn: () =>
@@ -30,12 +36,33 @@ export function JournalView() {
         entry_date: new Date().toISOString().slice(0, 10),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['journal'] })
+      invalidate()
       setTitle('')
       setContent('')
       setMood('okay')
     },
   })
+
+  const updateEntry = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { title: string; content: string; mood: Mood } }) =>
+      journalApi.update(id, data),
+    onSuccess: () => {
+      invalidate()
+      setEditingId(null)
+    },
+  })
+
+  const deleteEntry = useMutation({
+    mutationFn: (id: string) => journalApi.remove(id),
+    onSuccess: invalidate,
+  })
+
+  function startEdit(entry: NonNullable<typeof entries>[number]) {
+    setEditingId(entry.id)
+    setEditTitle(entry.title)
+    setEditContent(entry.content)
+    setEditMood(entry.mood ?? 'okay')
+  }
 
   return (
     <div className="flex h-full">
@@ -85,17 +112,80 @@ export function JournalView() {
       <div className="flex-1 overflow-y-auto p-6">
         <h2 className="mb-3 text-sm font-medium text-neutral-400">Past entries</h2>
         <div className="flex flex-col gap-3">
-          {entries?.map((entry) => (
-            <div key={entry.id} className="rounded bg-neutral-900 p-4">
-              <div className="mb-1 flex items-center justify-between">
-                <h3 className="font-medium">{entry.title}</h3>
-                <span className="text-xs text-neutral-500">
-                  {entry.mood && MOOD_EMOJI[entry.mood]} {entry.entry_date}
-                </span>
+          {entries?.map((entry) =>
+            editingId === entry.id ? (
+              <div key={entry.id} className="rounded bg-neutral-900 p-4">
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="mb-2 w-full bg-transparent font-medium outline-none"
+                />
+                <div className="mb-2 flex gap-1">
+                  {MOODS.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setEditMood(m)}
+                      className={`rounded px-1.5 py-1 text-base ${editMood === m ? 'bg-neutral-700' : 'bg-neutral-800'}`}
+                    >
+                      {MOOD_EMOJI[m]}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="mb-2 h-28 w-full resize-none rounded bg-neutral-800 p-2 text-sm outline-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() =>
+                      updateEntry.mutate({
+                        id: entry.id,
+                        data: { title: editTitle, content: editContent, mood: editMood },
+                      })
+                    }
+                    className="rounded bg-emerald-800 px-2 py-1 text-xs text-emerald-100 hover:bg-emerald-700"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="rounded bg-neutral-800 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-              <p className="whitespace-pre-wrap text-sm text-neutral-300">{entry.content}</p>
-            </div>
-          ))}
+            ) : (
+              <div key={entry.id} className="group rounded bg-neutral-900 p-4">
+                <div className="mb-1 flex items-center justify-between">
+                  <h3 className="font-medium">{entry.title}</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-neutral-500">
+                      {entry.mood && MOOD_EMOJI[entry.mood]} {entry.entry_date}
+                    </span>
+                    <button
+                      onClick={() => startEdit(entry)}
+                      className="hidden text-neutral-600 hover:text-neutral-300 group-hover:inline"
+                      title="Edit"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete entry "${entry.title}"?`)) deleteEntry.mutate(entry.id)
+                      }}
+                      className="hidden text-neutral-600 hover:text-red-400 group-hover:inline"
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-neutral-300">{entry.content}</p>
+              </div>
+            ),
+          )}
           {entries?.length === 0 && <p className="text-sm text-neutral-600">No entries yet.</p>}
         </div>
       </div>

@@ -27,6 +27,14 @@ export function ChapterList({
     },
   })
 
+  const deleteChapter = useMutation({
+    mutationFn: (id: string) => notebooksApi.deleteChapter(id),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ['chapters', notebookId] })
+      if (id === selectedId) onSelect('')
+    },
+  })
+
   return (
     <div className="w-64 shrink-0 border-r border-neutral-800 p-3">
       <h2 className="mb-2 text-sm font-medium text-neutral-400">Chapters</h2>
@@ -49,16 +57,29 @@ export function ChapterList({
       </form>
       <div className="flex flex-col gap-1">
         {chapters?.map((ch) => (
-          <button
+          <div
             key={ch.id}
-            onClick={() => onSelect(ch.id)}
-            className={`truncate rounded px-2 py-1.5 text-left text-sm ${
-              selectedId === ch.id ? 'bg-neutral-800' : 'hover:bg-neutral-900 text-neutral-300'
+            className={`group flex items-center rounded px-2 py-1.5 text-sm ${
+              selectedId === ch.id ? 'bg-neutral-800' : 'hover:bg-neutral-900'
             }`}
           >
-            {ch.pinned ? '📌 ' : ''}
-            {ch.title}
-          </button>
+            <button
+              onClick={() => onSelect(ch.id)}
+              className={`flex-1 truncate text-left ${selectedId === ch.id ? 'text-white' : 'text-neutral-300'}`}
+            >
+              {ch.pinned ? '📌 ' : ''}
+              {ch.title}
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`Delete chapter "${ch.title}"?`)) deleteChapter.mutate(ch.id)
+              }}
+              className="ml-1 hidden text-neutral-600 hover:text-red-400 group-hover:inline"
+              title="Delete"
+            >
+              ✕
+            </button>
+          </div>
         ))}
       </div>
     </div>

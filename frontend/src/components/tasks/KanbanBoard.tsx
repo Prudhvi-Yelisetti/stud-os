@@ -57,6 +57,16 @@ export function KanbanBoard() {
     },
   })
 
+  const renameTask = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => tasksApi.update(id, { title }),
+    onSuccess: invalidate,
+  })
+
+  const deleteTask = useMutation({
+    mutationFn: (id: string) => tasksApi.remove(id),
+    onSuccess: invalidate,
+  })
+
   const byStatus = (status: TaskStatus) => tasks?.filter((t) => t.status === status) ?? []
 
   return (
@@ -110,6 +120,8 @@ export function KanbanBoard() {
                   columns={COLUMNS}
                   onMove={(status) => moveTask.mutate({ id: task.id, status })}
                   onComplete={() => completeTask.mutate(task.id)}
+                  onRename={(title) => renameTask.mutate({ id: task.id, title })}
+                  onDelete={() => deleteTask.mutate(task.id)}
                 />
               ))}
             </div>
@@ -125,17 +137,58 @@ function TaskCard({
   columns,
   onMove,
   onComplete,
+  onRename,
+  onDelete,
 }: {
   task: Task
   columns: { status: TaskStatus; label: string }[]
   onMove: (status: TaskStatus) => void
   onComplete: () => void
+  onRename: (title: string) => void
+  onDelete: () => void
 }) {
+  const [editing, setEditing] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(task.title)
+
   return (
-    <div className="rounded bg-neutral-800 p-2.5 text-sm">
+    <div className="group rounded bg-neutral-800 p-2.5 text-sm">
       <div className="mb-1.5 flex items-center gap-1.5">
-        <span className={`h-2 w-2 rounded-full ${PRIORITY_COLOR[task.priority]}`} />
-        <span className="flex-1 truncate">{task.title}</span>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_COLOR[task.priority]}`} />
+        {editing ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => {
+              if (titleDraft.trim() && titleDraft !== task.title) onRename(titleDraft.trim())
+              setEditing(false)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+              if (e.key === 'Escape') setEditing(false)
+            }}
+            className="w-full bg-transparent outline-none"
+          />
+        ) : (
+          <span
+            className="flex-1 cursor-text truncate"
+            onClick={() => {
+              setTitleDraft(task.title)
+              setEditing(true)
+            }}
+          >
+            {task.title}
+          </span>
+        )}
+        <button
+          onClick={() => {
+            if (confirm(`Delete task "${task.title}"?`)) onDelete()
+          }}
+          className="hidden shrink-0 text-neutral-600 hover:text-red-400 group-hover:inline"
+          title="Delete"
+        >
+          ✕
+        </button>
       </div>
       <div className="flex items-center justify-between gap-1">
         <select

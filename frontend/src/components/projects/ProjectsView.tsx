@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { projectsApi } from '../../lib/projects'
+import type { Project } from '../../lib/api'
 
 export function ProjectsView() {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [newTitle, setNewTitle] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
 
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: projectsApi.list })
   const { data: projectTasks } = useQuery({
@@ -14,13 +17,38 @@ export function ProjectsView() {
     enabled: !!selectedId,
   })
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['projects'] })
+
   const createProject = useMutation({
     mutationFn: (title: string) => projectsApi.create({ title }),
     onSuccess: (p) => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      invalidate()
       setSelectedId(p.id)
     },
   })
+
+  const renameProject = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => projectsApi.update(id, { title }),
+    onSuccess: invalidate,
+  })
+
+  const deleteProject = useMutation({
+    mutationFn: (id: string) => projectsApi.remove(id),
+    onSuccess: () => {
+      invalidate()
+      setSelectedId(null)
+    },
+  })
+
+  function startEdit(p: Project) {
+    setEditingId(p.id)
+    setEditTitle(p.title)
+  }
+
+  function commitEdit() {
+    if (editingId && editTitle.trim()) renameProject.mutate({ id: editingId, title: editTitle.trim() })
+    setEditingId(null)
+  }
 
   return (
     <div className="flex h-full">
@@ -45,15 +73,45 @@ export function ProjectsView() {
         </form>
         <div className="flex flex-col gap-1">
           {projects?.map((p) => (
-            <button
+            <div
               key={p.id}
-              onClick={() => setSelectedId(p.id)}
-              className={`rounded px-2 py-1.5 text-left text-sm ${
-                selectedId === p.id ? 'bg-neutral-800' : 'hover:bg-neutral-900 text-neutral-300'
+              className={`group flex items-center rounded px-2 py-1.5 text-sm ${
+                selectedId === p.id ? 'bg-neutral-800' : 'hover:bg-neutral-900'
               }`}
             >
-              {p.title}
-            </button>
+              {editingId === p.id ? (
+                <input
+                  autoFocus
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={commitEdit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitEdit()
+                    if (e.key === 'Escape') setEditingId(null)
+                  }}
+                  className="w-full bg-transparent outline-none"
+                />
+              ) : (
+                <button
+                  onClick={() => setSelectedId(p.id)}
+                  onDoubleClick={() => startEdit(p)}
+                  className={`flex-1 truncate text-left ${selectedId === p.id ? 'text-white' : 'text-neutral-300'}`}
+                >
+                  {p.title}
+                </button>
+              )}
+              {editingId !== p.id && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete project "${p.title}"?`)) deleteProject.mutate(p.id)
+                  }}
+                  className="ml-1 hidden text-neutral-600 hover:text-red-400 group-hover:inline"
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </div>
