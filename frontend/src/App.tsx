@@ -7,6 +7,7 @@ import { JournalPage } from './pages/JournalPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { GraphPage } from './pages/GraphPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { TimelinePage } from './pages/TimelinePage'
 
 const queryClient = new QueryClient()
 
@@ -22,6 +23,7 @@ function App() {
             <Route path="/journal" element={<JournalPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/graph" element={<GraphPage />} />
+            <Route path="/timeline" element={<TimelinePage />} />
           </Route>
         </Routes>
       </BrowserRouter>

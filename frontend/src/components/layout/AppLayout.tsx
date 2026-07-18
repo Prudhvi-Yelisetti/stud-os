@@ -9,6 +9,7 @@ const navItems = [
   { to: '/journal', label: 'Journal' },
   { to: '/projects', label: 'Projects' },
   { to: '/graph', label: 'Graph' },
+  { to: '/timeline', label: 'Timeline' },
 ]
 
 export function AppLayout() {

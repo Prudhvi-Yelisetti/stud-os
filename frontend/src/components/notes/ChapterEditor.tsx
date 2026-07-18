@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notebooksApi } from '../../lib/notebooks'
+import { AttachmentPanel } from '../attachments/AttachmentPanel'
 
 export function ChapterEditor({ chapterId }: { chapterId: string }) {
   const queryClient = useQueryClient()
@@ -60,6 +61,7 @@ export function ChapterEditor({ chapterId }: { chapterId: string }) {
         ) : (
           <p className="text-sm text-neutral-600">No backlinks yet.</p>
         )}
+        <AttachmentPanel ownerType="chapter" ownerId={chapterId} />
       </div>
     </div>
   )

@@ -13,13 +13,18 @@ config = context.config
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
 # add your model's MetaData object here
 # for 'autogenerate' support
 from backend.database.base import Base
 from backend.database import models  # noqa: F401 -- registers all models
+from backend.database.session import DATABASE_URL
 
 target_metadata = Base.metadata
+
+# Single source of truth for the DB location -- overrides whatever static
+# value is in alembic.ini so migrations always target the same file the
+# running app uses, regardless of the process's CWD.
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
