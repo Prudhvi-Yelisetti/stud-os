@@ -5,11 +5,18 @@ Personal knowledge, productivity, and AI operating system. See
 
 ## Status
 
-**Phase 1 (Core knowledge layer) — done:** Notebooks, Chapters,
-`[[wiki-links]]`, backlinks, chapter version history.
+Nearly all of V1 from the vision doc is built and working: Notes
+(notebooks/chapters/`[[wiki-links]]`/backlinks/version history), Tasks
+(Kanban + recurring scheduling), Gamification (XP/levels/streaks/badges/
+penalties), Journal, Projects/Subtasks, global keyword Search, the
+Knowledge Graph (React Flow), a 5-widget Dashboard, Timeline, and file
+Attachments.
 
-**Next up:** Phase 2 — Tasks (Kanban + recurring scheduling) and the
-gamification engine (XP/levels/badges/streaks/penalties).
+**Not yet built:** AI layer (V2 in the vision doc — suggestions, semantic
+search, study coach). Intentionally deferred until there's enough real
+content in the graph for it to be worth building against.
+
+See `REBUILD_PLAN.md` for the full data model and phase-by-phase history.
 
 ## Running locally
 
