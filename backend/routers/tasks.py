@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.database.session import get_db
-from backend.database.models.tasks import Task, TaskStatus, Subtask
+from backend.database.models.tasks import Task, TaskStatus, Subtask, RepeatRule
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.tasks import TaskCreate, TaskUpdate, TaskOut, TaskCompleteResponse, GamificationEventOut
 from backend.schemas.projects import SubtaskCreate, SubtaskUpdate, SubtaskOut
 from backend.gamification.engine import on_task_completed
+from backend.utils.recurrence import next_occurrence
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -78,6 +79,27 @@ def complete_task(task_id: str, db: Session = Depends(get_db), user: User = Depe
     db.refresh(task)
 
     result = on_task_completed(db, user.id, task.priority)
+
+    if task.repeat_rule != RepeatRule.none:
+        base = task.due_at or task.scheduled_at or datetime.now(timezone.utc)
+        next_due = next_occurrence(task.repeat_rule, base)
+        next_scheduled = (
+            next_occurrence(task.repeat_rule, task.scheduled_at) if task.scheduled_at else None
+        )
+        db.add(
+            Task(
+                user_id=user.id,
+                project_id=task.project_id,
+                title=task.title,
+                description=task.description,
+                priority=task.priority,
+                repeat_rule=task.repeat_rule,
+                scheduled_at=next_scheduled,
+                due_at=next_due,
+                status=TaskStatus.todo,
+            )
+        )
+        db.commit()
 
     return TaskCompleteResponse(
         task=TaskOut.model_validate(task),
