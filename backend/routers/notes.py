@@ -9,7 +9,7 @@ from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.notes import (
     NotebookCreate, NotebookUpdate, NotebookOut,
-    ChapterCreate, ChapterUpdate, ChapterOut, BacklinkOut,
+    ChapterCreate, ChapterUpdate, ChapterOut, BacklinkOut, ChapterTitleMatch,
 )
 from backend.utils.wiki_parser import extract_wiki_links
 
@@ -140,6 +140,28 @@ def list_recent_chapters(
         .filter(Notebook.user_id == user.id, Chapter.is_trashed.is_(False))
         .order_by(Chapter.updated_at.desc())
         .limit(limit)
+        .all()
+    )
+
+
+@router.get("/chapters/search", response_model=list[ChapterTitleMatch])
+def search_chapter_titles(
+    q: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """
+    Title-only lookup across all of the user's notebooks. Powers wiki-link
+    autocomplete while typing [[ and exact-match resolution when a link
+    is clicked in preview mode.
+    """
+    if not q or not q.strip():
+        return []
+    like = f"%{q.strip()}%"
+    return (
+        db.query(Chapter)
+        .join(Notebook, Notebook.id == Chapter.notebook_id)
+        .filter(Notebook.user_id == user.id, Chapter.is_trashed.is_(False), Chapter.title.ilike(like))
+        .order_by(Chapter.title)
+        .limit(8)
         .all()
     )
 

@@ -24,7 +24,14 @@ export function NotesPage() {
         </div>
       )}
       {chapterId ? (
-        <ChapterEditor chapterId={chapterId} onDeleted={() => setChapterId(null)} />
+        <ChapterEditor
+          chapterId={chapterId}
+          onDeleted={() => setChapterId(null)}
+          onNavigate={(targetNotebookId, targetChapterId) => {
+            setNotebookId(targetNotebookId)
+            setChapterId(targetChapterId)
+          }}
+        />
       ) : (
         <div className="flex-1 p-6 text-sm text-neutral-600">Select a chapter to start writing</div>
       )}

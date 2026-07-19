@@ -1,4 +1,4 @@
-import { api, type Notebook, type Chapter, type Backlink } from './api'
+import { api, type Notebook, type Chapter, type Backlink, type ChapterTitleMatch } from './api'
 
 export const notebooksApi = {
   list: () => api.get<Notebook[]>('/notebooks').then((r) => r.data),
@@ -22,4 +22,6 @@ export const notebooksApi = {
     api.get<Backlink[]>(`/notebooks/chapters/${chapterId}/backlinks`).then((r) => r.data),
   listRecentChapters: (limit = 5) =>
     api.get<Chapter[]>('/notebooks/chapters/recent', { params: { limit } }).then((r) => r.data),
+  searchChapterTitles: (q: string) =>
+    api.get<ChapterTitleMatch[]>('/notebooks/chapters/search', { params: { q } }).then((r) => r.data),
 }

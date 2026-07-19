@@ -28,6 +28,12 @@ export interface Backlink {
   title: string
 }
 
+export interface ChapterTitleMatch {
+  id: string
+  title: string
+  notebook_id: string
+}
+
 export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type RepeatRule = 'none' | 'daily' | 'weekly' | 'monthly'
