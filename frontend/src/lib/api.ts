@@ -143,3 +143,10 @@ export interface Attachment {
   size_bytes: number
   created_at: string
 }
+
+export interface TrashedItem {
+  type: 'notebook' | 'chapter' | 'task' | 'journal' | 'project'
+  id: string
+  title: string
+  trashed_at: string | null
+}

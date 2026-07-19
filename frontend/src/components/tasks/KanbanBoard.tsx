@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tasksApi } from '../../lib/tasks'
 import { projectsApi } from '../../lib/projects'
-import type { Task, TaskStatus, TaskPriority } from '../../lib/api'
+import { SubtaskChecklist } from './SubtaskChecklist'
+import type { Task, TaskStatus, TaskPriority, RepeatRule } from '../../lib/api'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: 'backlog', label: 'Backlog' },
@@ -18,10 +19,19 @@ const PRIORITY_COLOR: Record<TaskPriority, string> = {
   urgent: 'bg-red-700',
 }
 
+const REPEAT_ICON: Record<RepeatRule, string> = {
+  none: '',
+  daily: '🔁 daily',
+  weekly: '🔁 weekly',
+  monthly: '🔁 monthly',
+}
+
 export function KanbanBoard() {
   const queryClient = useQueryClient()
   const [newTitle, setNewTitle] = useState('')
   const [newProjectId, setNewProjectId] = useState('')
+  const [newDueDate, setNewDueDate] = useState('')
+  const [newRepeatRule, setNewRepeatRule] = useState<RepeatRule>('none')
   const [levelUpMessage, setLevelUpMessage] = useState<string | null>(null)
 
   const { data: tasks } = useQuery({ queryKey: ['tasks'], queryFn: () => tasksApi.list() })
@@ -34,7 +44,13 @@ export function KanbanBoard() {
   }
 
   const createTask = useMutation({
-    mutationFn: (title: string) => tasksApi.create({ title, project_id: newProjectId || undefined }),
+    mutationFn: (title: string) =>
+      tasksApi.create({
+        title,
+        project_id: newProjectId || undefined,
+        due_at: newDueDate ? new Date(newDueDate).toISOString() : undefined,
+        repeat_rule: newRepeatRule !== 'none' ? newRepeatRule : undefined,
+      }),
     onSuccess: invalidate,
   })
 
@@ -84,6 +100,8 @@ export function KanbanBoard() {
           if (newTitle.trim()) {
             createTask.mutate(newTitle.trim())
             setNewTitle('')
+            setNewDueDate('')
+            setNewRepeatRule('none')
           }
         }}
       >
@@ -104,6 +122,22 @@ export function KanbanBoard() {
               {p.title}
             </option>
           ))}
+        </select>
+        <input
+          type="date"
+          value={newDueDate}
+          onChange={(e) => setNewDueDate(e.target.value)}
+          className="rounded bg-neutral-900 px-2 py-2 text-sm text-neutral-400 outline-none"
+        />
+        <select
+          value={newRepeatRule}
+          onChange={(e) => setNewRepeatRule(e.target.value as RepeatRule)}
+          className="rounded bg-neutral-900 px-2 py-2 text-sm text-neutral-400 outline-none"
+        >
+          <option value="none">No repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
         </select>
       </form>
       <div className="grid flex-1 grid-cols-4 gap-4 overflow-hidden">
@@ -149,6 +183,8 @@ function TaskCard({
 }) {
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(task.title)
+  const [showSubtasks, setShowSubtasks] = useState(false)
+  const isOverdue = task.due_at && task.status !== 'done' && new Date(task.due_at) < new Date()
 
   return (
     <div className="group rounded bg-neutral-800 p-2.5 text-sm">
@@ -190,6 +226,19 @@ function TaskCard({
           ✕
         </button>
       </div>
+      {(task.due_at || task.repeat_rule !== 'none') && (
+        <div className="mb-1.5 flex items-center gap-2 text-[11px]">
+          {task.due_at && (
+            <span className={isOverdue ? 'text-red-400' : 'text-neutral-500'}>
+              {isOverdue ? 'Overdue: ' : 'Due '}
+              {new Date(task.due_at).toLocaleDateString()}
+            </span>
+          )}
+          {task.repeat_rule !== 'none' && (
+            <span className="text-neutral-500">{REPEAT_ICON[task.repeat_rule]}</span>
+          )}
+        </div>
+      )}
       <div className="flex items-center justify-between gap-1">
         <select
           value={task.status}
@@ -211,6 +260,13 @@ function TaskCard({
           </button>
         )}
       </div>
+      <button
+        onClick={() => setShowSubtasks((v) => !v)}
+        className="mt-1.5 text-[11px] text-neutral-600 hover:text-neutral-400"
+      >
+        {showSubtasks ? '▾' : '▸'} Subtasks
+      </button>
+      {showSubtasks && <SubtaskChecklist taskId={task.id} />}
     </div>
   )
 }

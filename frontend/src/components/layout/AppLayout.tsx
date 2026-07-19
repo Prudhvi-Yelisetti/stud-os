@@ -10,6 +10,7 @@ const navItems = [
   { to: '/projects', label: 'Projects' },
   { to: '/graph', label: 'Graph' },
   { to: '/timeline', label: 'Timeline' },
+  { to: '/trash', label: 'Trash' },
 ]
 
 export function AppLayout() {

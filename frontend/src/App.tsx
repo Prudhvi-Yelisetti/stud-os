@@ -8,6 +8,7 @@ import { ProjectsPage } from './pages/ProjectsPage'
 import { GraphPage } from './pages/GraphPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { TimelinePage } from './pages/TimelinePage'
+import { TrashPage } from './pages/TrashPage'
 
 const queryClient = new QueryClient()
 
@@ -24,6 +25,7 @@ function App() {
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/graph" element={<GraphPage />} />
             <Route path="/timeline" element={<TimelinePage />} />
+            <Route path="/trash" element={<TrashPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

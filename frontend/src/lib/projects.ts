@@ -17,4 +17,5 @@ export const subtasksApi = {
     api.post<Subtask>(`/tasks/${taskId}/subtasks`, { title }).then((r) => r.data),
   toggle: (subtaskId: string, done: boolean) =>
     api.patch<Subtask>(`/tasks/subtasks/${subtaskId}`, { done }).then((r) => r.data),
+  remove: (subtaskId: string) => api.delete(`/tasks/subtasks/${subtaskId}`),
 }
