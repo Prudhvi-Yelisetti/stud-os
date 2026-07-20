@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { projectsApi } from '../../lib/projects'
 import type { Project } from '../../lib/api'
@@ -32,6 +32,12 @@ export function ProjectsView() {
     onSuccess: invalidate,
   })
 
+  const updateDescription = useMutation({
+    mutationFn: ({ id, description }: { id: string; description: string }) =>
+      projectsApi.update(id, { description }),
+    onSuccess: invalidate,
+  })
+
   const deleteProject = useMutation({
     mutationFn: (id: string) => projectsApi.remove(id),
     onSuccess: () => {
@@ -49,6 +55,13 @@ export function ProjectsView() {
     if (editingId && editTitle.trim()) renameProject.mutate({ id: editingId, title: editTitle.trim() })
     setEditingId(null)
   }
+
+  const selectedProject = projects?.find((p) => p.id === selectedId)
+  const [descDraft, setDescDraft] = useState('')
+
+  useEffect(() => {
+    setDescDraft(selectedProject?.description ?? '')
+  }, [selectedProject?.id])
 
   return (
     <div className="flex h-full">
@@ -119,9 +132,19 @@ export function ProjectsView() {
         {!selectedId && <p className="text-sm text-neutral-600">Select a project</p>}
         {selectedId && (
           <>
-            <h1 className="mb-4 text-xl font-semibold">
-              {projects?.find((p) => p.id === selectedId)?.title}
-            </h1>
+            <h1 className="mb-2 text-xl font-semibold">{selectedProject?.title}</h1>
+            <textarea
+              value={descDraft}
+              onChange={(e) => setDescDraft(e.target.value)}
+              onBlur={() => {
+                if (selectedId && descDraft !== (selectedProject?.description ?? '')) {
+                  updateDescription.mutate({ id: selectedId, description: descDraft })
+                }
+              }}
+              placeholder="Add a description..."
+              rows={2}
+              className="mb-4 w-full resize-none rounded bg-neutral-900 p-2 text-sm text-neutral-300 outline-none placeholder:text-neutral-600"
+            />
             <h2 className="mb-2 text-sm font-medium text-neutral-400">Tasks</h2>
             <div className="flex flex-col gap-2">
               {projectTasks?.map((t) => (

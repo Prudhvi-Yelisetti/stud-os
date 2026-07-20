@@ -81,3 +81,27 @@ def test_delete_then_trash_then_restore_task(client):
 
     client.post(f"/api/trash/task/{task['id']}/restore")
     assert task["id"] in [t["id"] for t in client.get("/api/tasks").json()]
+
+
+def test_list_tasks_sorts_by_real_priority_severity_not_alphabetically(client):
+    # Regression test: native enum columns sort alphabetically in SQL
+    # ("high" > "low" alphabetically puts it in the wrong place relative
+    # to "medium" and "urgent"). Create in an order that would expose
+    # alphabetical sorting if it crept back in.
+    client.post("/api/tasks", json={"title": "M", "priority": "medium"})
+    client.post("/api/tasks", json={"title": "L", "priority": "low"})
+    client.post("/api/tasks", json={"title": "H", "priority": "high"})
+    client.post("/api/tasks", json={"title": "U", "priority": "urgent"})
+
+    titles_in_order = [t["title"] for t in client.get("/api/tasks").json()]
+    assert titles_in_order == ["U", "H", "M", "L"]
+
+
+def test_project_task_list_surfaces_active_work_before_done(client):
+    proj = client.post("/api/projects", json={"title": "P"}).json()
+    done_task = client.post("/api/tasks", json={"title": "Finished", "project_id": proj["id"]}).json()
+    client.post(f"/api/tasks/{done_task['id']}/complete")
+    client.post("/api/tasks", json={"title": "Still todo", "project_id": proj["id"]})
+
+    titles_in_order = [t["title"] for t in client.get(f"/api/projects/{proj['id']}/tasks").json()]
+    assert titles_in_order == ["Still todo", "Finished"]

@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from backend.database.session import get_db
 from backend.database.models.projects import Project
-from backend.database.models.tasks import Task, Subtask
+from backend.database.models.tasks import Task, TaskStatus, Subtask
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.projects import (
@@ -14,6 +15,17 @@ from backend.schemas.projects import (
 from backend.schemas.tasks import TaskOut
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+# Same alphabetical-sort pitfall as priority (see routers/tasks.py) --
+# "done" sorts before "todo" alphabetically, which would bury active work
+# under finished work. Map to an explicit "needs attention" ordering instead.
+STATUS_WEIGHT = case(
+    (Task.status == TaskStatus.in_progress, 0),
+    (Task.status == TaskStatus.todo, 1),
+    (Task.status == TaskStatus.backlog, 2),
+    (Task.status == TaskStatus.done, 3),
+    else_=4,
+)
 
 
 def _get_project_or_404(db: Session, project_id: str, user: User) -> Project:
@@ -77,6 +89,6 @@ def list_project_tasks(project_id: str, db: Session = Depends(get_db), user: Use
     return (
         db.query(Task)
         .filter(Task.project_id == project_id, Task.is_trashed.is_(False))
-        .order_by(Task.status, Task.created_at.desc())
+        .order_by(STATUS_WEIGHT, Task.created_at.desc())
         .all()
     )

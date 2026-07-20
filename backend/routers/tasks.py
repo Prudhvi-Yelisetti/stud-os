@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from backend.database.session import get_db
-from backend.database.models.tasks import Task, TaskStatus, Subtask, RepeatRule
+from backend.database.models.tasks import Task, TaskStatus, TaskPriority, Subtask, RepeatRule
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.tasks import TaskCreate, TaskUpdate, TaskOut, TaskCompleteResponse, GamificationEventOut
@@ -13,6 +14,18 @@ from backend.gamification.engine import on_task_completed
 from backend.utils.recurrence import next_occurrence
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+# Native enum columns sort alphabetically by their stored string value in
+# SQL, not by logical severity ("high" sorts after "low" alphabetically).
+# This case expression maps each value to its actual priority weight so
+# `.order_by(PRIORITY_WEIGHT.desc())` reflects real urgency, not the alphabet.
+PRIORITY_WEIGHT = case(
+    (Task.priority == TaskPriority.urgent, 4),
+    (Task.priority == TaskPriority.high, 3),
+    (Task.priority == TaskPriority.medium, 2),
+    (Task.priority == TaskPriority.low, 1),
+    else_=0,
+)
 
 
 def _get_task_or_404(db: Session, task_id: str, user: User) -> Task:
@@ -35,7 +48,12 @@ def list_tasks(
     q = db.query(Task).filter(Task.user_id == user.id, Task.is_trashed.is_(False))
     if status is not None:
         q = q.filter(Task.status == status)
-    return q.order_by(Task.priority.desc(), Task.created_at.desc()).all()
+    return q.order_by(
+        PRIORITY_WEIGHT.desc(),
+        Task.due_at.is_(None),  # tasks with a due date sort before those without
+        Task.due_at.asc(),
+        Task.created_at.desc(),
+    ).all()
 
 
 @router.post("", response_model=TaskOut, status_code=201)

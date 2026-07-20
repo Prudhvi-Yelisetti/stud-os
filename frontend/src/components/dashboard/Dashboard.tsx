@@ -27,7 +27,10 @@ export function Dashboard() {
   })
   const { data: graph } = useQuery({ queryKey: ['graph'], queryFn: graphApi.get })
 
-  const dueTasks = tasks?.filter((t) => t.status !== 'done') ?? []
+  // tasksApi.list() already comes back sorted by real urgency (priority
+  // weight, then soonest due date) from the backend -- this widget just
+  // needs to surface that order and flag anything actually overdue.
+  const pendingTasks = tasks?.filter((t) => t.status !== 'done') ?? []
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -35,13 +38,20 @@ export function Dashboard() {
       <div className="grid grid-cols-3 gap-4">
         <Widget title="Tasks Due">
           <ul className="flex flex-col gap-1.5 text-sm">
-            {dueTasks.slice(0, 6).map((t) => (
-              <li key={t.id} className="flex items-center justify-between">
-                <span className="truncate">{t.title}</span>
-                <span className="text-xs text-neutral-500">{t.status}</span>
-              </li>
-            ))}
-            {dueTasks.length === 0 && <li className="text-neutral-600">Nothing pending 🎉</li>}
+            {pendingTasks.slice(0, 6).map((t) => {
+              const isOverdue = t.due_at && new Date(t.due_at) < new Date()
+              return (
+                <li key={t.id} className="flex items-center justify-between gap-2">
+                  <span className="truncate">{t.title}</span>
+                  <span className={`shrink-0 text-xs ${isOverdue ? 'font-medium text-red-400' : 'text-neutral-500'}`}>
+                    {t.due_at
+                      ? `${isOverdue ? 'Overdue ' : ''}${new Date(t.due_at).toLocaleDateString()}`
+                      : t.status}
+                  </span>
+                </li>
+              )
+            })}
+            {pendingTasks.length === 0 && <li className="text-neutral-600">Nothing pending 🎉</li>}
           </ul>
         </Widget>
 
@@ -63,6 +73,7 @@ export function Dashboard() {
             {entries?.length === 0 && <li className="text-neutral-600">No entries yet</li>}
           </ul>
         </Widget>
+
         <Widget title="Learning Progress">
           {profile && (
             <div className="text-sm">
