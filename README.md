@@ -39,3 +39,20 @@ npm run dev
 ```
 Visit http://localhost:5173 — the dev server proxies `/api` to the
 backend on port 8000.
+
+## Testing
+
+Two layers, both run from the repo root:
+
+**Unit + integration (pytest)** — isolated, never touches the dev
+database, safe to run anytime including against a live dev server:
+```bash
+uv pip install --python .venv/bin/python -r backend/requirements-dev.txt   # first time only
+.venv/bin/python -m pytest
+```
+
+**End-to-end smoke test** — real HTTP calls against a *running* backend,
+exercises the full feature surface in one pass. Start the backend first:
+```bash
+.venv/bin/python backend/qa_check.py
+```

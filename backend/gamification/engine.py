@@ -9,7 +9,9 @@ from backend.database.models.tasks import TaskPriority
 from backend.gamification.xp_rules import XP_FOR_TASK_COMPLETION
 from backend.gamification.levels import apply_xp
 from backend.gamification.streaks import record_activity
-from backend.gamification.badges import award_badge_if_new, check_streak_badges, check_level_badges
+from backend.gamification.badges import (
+    award_badge_if_new, check_streak_badges, check_level_badges, ensure_badges_seeded,
+)
 
 
 class GamificationResult:
@@ -29,6 +31,11 @@ class GamificationResult:
 
 
 def on_task_completed(db: Session, user_id: str, priority: TaskPriority) -> GamificationResult:
+    # Badges may never have been seeded if the user has never opened the
+    # gamification profile view -- seed defensively here too, since badge
+    # awards can happen from task completion without that page ever loading.
+    ensure_badges_seeded(db)
+
     xp_amount = XP_FOR_TASK_COMPLETION[priority]
 
     db.add(XPLog(user_id=user_id, amount=xp_amount, reason=f"Completed a {priority.value} priority task"))
