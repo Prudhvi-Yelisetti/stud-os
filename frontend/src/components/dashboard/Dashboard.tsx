@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { tasksApi } from '../../lib/tasks'
 import { journalApi } from '../../lib/journal'
 import { notebooksApi } from '../../lib/notebooks'
@@ -32,9 +33,33 @@ export function Dashboard() {
   // needs to surface that order and flag anything actually overdue.
   const pendingTasks = tasks?.filter((t) => t.status !== 'done') ?? []
 
+  const allLoaded = tasks && entries && recentChapters
+  const isFreshWorkspace = allLoaded && tasks.length === 0 && entries.length === 0 && recentChapters.length === 0
+
   return (
     <div className="h-full overflow-y-auto p-6">
       <h1 className="mb-6 text-xl font-semibold">Dashboard</h1>
+
+      {isFreshWorkspace && (
+        <div className="mb-6 rounded border border-neutral-800 bg-neutral-900 p-6">
+          <h2 className="mb-1 text-lg font-medium">Welcome to Stud-OS 👋</h2>
+          <p className="mb-4 text-sm text-neutral-400">
+            Nothing here yet — this dashboard fills in as you use the app. A few places to start:
+          </p>
+          <div className="flex gap-3">
+            <Link to="/notes" className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700">
+              📓 Write your first note
+            </Link>
+            <Link to="/tasks" className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700">
+              ✅ Add a task
+            </Link>
+            <Link to="/journal" className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700">
+              📔 Journal today
+            </Link>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-4">
         <Widget title="Tasks Due">
           <ul className="flex flex-col gap-1.5 text-sm">

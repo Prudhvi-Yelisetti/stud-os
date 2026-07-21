@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notebooksApi } from '../../lib/notebooks'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
-import { splitByWikiLinks, extractWikiLinkTitles, detectActiveWikiLinkQuery } from '../../lib/wikiLinks'
+import { WikiLinkText } from '../shared/WikiLinkText'
+import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
+import { detectActiveWikiLinkQuery } from '../../lib/wikiLinks'
 
 export function ChapterEditor({
   chapterId,
@@ -71,34 +73,15 @@ export function ChapterEditor({
     mutationFn: (title: string) => notebooksApi.createChapter(chapter!.notebook_id, { title }),
   })
 
-  // Resolve every [[Title]] in the content to a real chapter (or null if
-  // it doesn't exist yet) so preview mode can render clickable / creatable
-  // links. Only runs in preview mode to avoid firing on every keystroke.
-  const linkTitles = useMemo(() => extractWikiLinkTitles(content), [content])
-  const titleQueries = useQueries({
-    queries: linkTitles.map((title) => ({
-      queryKey: ['chapter-title-match', title],
-      queryFn: () => notebooksApi.searchChapterTitles(title),
-      enabled: mode === 'preview',
-      staleTime: 10_000,
-    })),
-  })
+  // Only resolves in preview mode to avoid firing on every keystroke.
+  const resolvedLinks = useResolvedWikiLinks(content, mode === 'preview')
 
-  const resolvedLinks = useMemo(() => {
-    const map = new Map<string, { id: string; notebook_id: string } | null>()
-    linkTitles.forEach((title, i) => {
-      const matches = titleQueries[i]?.data
-      const exact = matches?.find((m) => m.title.toLowerCase() === title.toLowerCase())
-      map.set(title, exact ? { id: exact.id, notebook_id: exact.notebook_id } : null)
-    })
-    return map
-  }, [linkTitles, titleQueries])
+  function handleResolvedClick(resolved: { id: string; notebook_id: string }) {
+    onNavigate(resolved.notebook_id, resolved.id)
+  }
 
-  function handleLinkClick(title: string) {
-    const resolved = resolvedLinks.get(title)
-    if (resolved) {
-      onNavigate(resolved.notebook_id, resolved.id)
-    } else if (chapter && confirm(`No chapter titled "${title}" yet. Create it in this notebook?`)) {
+  function handleUnresolvedClick(title: string) {
+    if (chapter && confirm(`No chapter titled "${title}" yet. Create it in this notebook?`)) {
       createChapter.mutate(title, {
         onSuccess: (newChapter) => {
           queryClient.invalidateQueries({ queryKey: ['chapters'] })
@@ -235,25 +218,13 @@ export function ChapterEditor({
           </div>
         ) : (
           <div className="h-[calc(100%-3rem)] w-full overflow-y-auto whitespace-pre-wrap rounded bg-neutral-900 p-4 text-sm leading-relaxed">
-            {splitByWikiLinks(content).map((part, i) =>
-              part.type === 'text' ? (
-                <span key={i}>{part.content}</span>
-              ) : (
-                <button
-                  key={i}
-                  onClick={() => handleLinkClick(part.content)}
-                  className={
-                    resolvedLinks.get(part.content)
-                      ? 'text-emerald-400 underline decoration-emerald-700 hover:text-emerald-300'
-                      : 'text-neutral-500 underline decoration-dashed decoration-neutral-600 hover:text-neutral-300'
-                  }
-                  title={resolvedLinks.get(part.content) ? 'Go to chapter' : 'Create this chapter'}
-                >
-                  {part.content}
-                </button>
-              ),
-            )}
-            {content.trim() === '' && <span className="text-neutral-600">Nothing written yet.</span>}
+            <WikiLinkText
+              content={content}
+              resolvedLinks={resolvedLinks}
+              onResolvedClick={handleResolvedClick}
+              onUnresolvedClick={handleUnresolvedClick}
+              emptyPlaceholder="Nothing written yet."
+            />
           </div>
         )}
       </div>

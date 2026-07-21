@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { journalApi } from '../../lib/journal'
 import type { Mood } from '../../lib/api'
+import { WikiLinkText } from '../shared/WikiLinkText'
+import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 
 const MOOD_EMOJI: Record<Mood, string> = {
   great: '🤩',
@@ -12,6 +15,25 @@ const MOOD_EMOJI: Record<Mood, string> = {
 }
 
 const MOODS: Mood[] = ['great', 'good', 'okay', 'bad', 'terrible']
+
+// Journal entries have no notebook of their own, so unresolved [[links]]
+// can't be created in-context the way they can from a chapter -- they
+// render distinctly but stay inert (WikiLinkText's default when no
+// onUnresolvedClick is passed). Resolved links navigate into Notes.
+function JournalEntryContent({ content }: { content: string }) {
+  const navigate = useNavigate()
+  const resolvedLinks = useResolvedWikiLinks(content, true)
+
+  return (
+    <p className="whitespace-pre-wrap text-sm text-neutral-300">
+      <WikiLinkText
+        content={content}
+        resolvedLinks={resolvedLinks}
+        onResolvedClick={(resolved) => navigate(`/notes?chapter=${resolved.id}`)}
+      />
+    </p>
+  )
+}
 
 export function JournalView() {
   const queryClient = useQueryClient()
@@ -182,7 +204,7 @@ export function JournalView() {
                     </button>
                   </div>
                 </div>
-                <p className="whitespace-pre-wrap text-sm text-neutral-300">{entry.content}</p>
+                <JournalEntryContent content={entry.content} />
               </div>
             ),
           )}
