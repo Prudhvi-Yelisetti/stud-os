@@ -11,6 +11,7 @@ from backend.dependencies import get_current_user
 from backend.schemas.tasks import TaskCreate, TaskUpdate, TaskOut, TaskCompleteResponse, GamificationEventOut
 from backend.schemas.projects import SubtaskCreate, SubtaskUpdate, SubtaskOut
 from backend.gamification.engine import on_task_completed
+from backend.gamification.penalties import check_and_apply_overdue_penalties
 from backend.utils.recurrence import next_occurrence
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -45,6 +46,8 @@ def list_tasks(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    check_and_apply_overdue_penalties(db, user.id)
+
     q = db.query(Task).filter(Task.user_id == user.id, Task.is_trashed.is_(False))
     if status is not None:
         q = q.filter(Task.status == status)

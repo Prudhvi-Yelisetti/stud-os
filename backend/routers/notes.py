@@ -9,7 +9,7 @@ from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.notes import (
     NotebookCreate, NotebookUpdate, NotebookOut,
-    ChapterCreate, ChapterUpdate, ChapterOut, BacklinkOut, ChapterTitleMatch,
+    ChapterCreate, ChapterUpdate, ChapterOut, BacklinkOut, ChapterTitleMatch, ChapterVersionOut,
 )
 from backend.utils.wiki_parser import extract_wiki_links
 
@@ -211,3 +211,43 @@ def get_backlinks(chapter_id: str, db: Session = Depends(get_db)):
         .filter(ChapterLink.to_chapter_id == chapter_id, Chapter.is_trashed.is_(False))
         .all()
     )
+
+
+@router.get("/chapters/{chapter_id}/versions", response_model=list[ChapterVersionOut])
+def list_chapter_versions(chapter_id: str, db: Session = Depends(get_db)):
+    """Past snapshots, newest first. The current content is NOT included
+    here -- it lives on the chapter itself, this is history only."""
+    _get_chapter_or_404(db, chapter_id)
+    return (
+        db.query(ChapterVersion)
+        .filter(ChapterVersion.chapter_id == chapter_id)
+        .order_by(ChapterVersion.version_number.desc())
+        .all()
+    )
+
+
+@router.post("/chapters/{chapter_id}/versions/{version_id}/restore", response_model=ChapterOut)
+def restore_chapter_version(chapter_id: str, version_id: str, db: Session = Depends(get_db)):
+    """
+    Restores a past snapshot as the chapter's current content. The content
+    being replaced is itself snapshotted first, so restoring never loses
+    data -- it's just another entry in the history, not a destructive undo.
+    """
+    ch = _get_chapter_or_404(db, chapter_id)
+    target_version = (
+        db.query(ChapterVersion)
+        .filter(ChapterVersion.id == version_id, ChapterVersion.chapter_id == chapter_id)
+        .first()
+    )
+    if target_version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    db.add(ChapterVersion(chapter_id=ch.id, content_snapshot=ch.content, version_number=ch.version))
+    ch.version += 1
+    ch.content = target_version.content_snapshot
+    db.commit()
+    db.refresh(ch)
+
+    _sync_wiki_links(db, ch)
+    db.commit()
+    return ch

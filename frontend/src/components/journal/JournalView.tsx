@@ -5,6 +5,7 @@ import { journalApi } from '../../lib/journal'
 import type { Mood } from '../../lib/api'
 import { WikiLinkText } from '../shared/WikiLinkText'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
+import { MoodHeatmap } from './MoodHeatmap'
 
 const MOOD_EMOJI: Record<Mood, string> = {
   great: '🤩',
@@ -25,13 +26,11 @@ function JournalEntryContent({ content }: { content: string }) {
   const resolvedLinks = useResolvedWikiLinks(content, true)
 
   return (
-    <p className="whitespace-pre-wrap text-sm text-neutral-300">
-      <WikiLinkText
-        content={content}
-        resolvedLinks={resolvedLinks}
-        onResolvedClick={(resolved) => navigate(`/notes?chapter=${resolved.id}`)}
-      />
-    </p>
+    <WikiLinkText
+      content={content}
+      resolvedLinks={resolvedLinks}
+      onResolvedClick={(resolved) => navigate(`/notes?chapter=${resolved.id}`)}
+    />
   )
 }
 
@@ -132,7 +131,8 @@ export function JournalView() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
-        <h2 className="mb-3 text-sm font-medium text-neutral-400">Past entries</h2>
+        {entries && entries.length > 0 && <MoodHeatmap entries={entries} />}
+        <h2 className="mb-3 mt-6 text-sm font-medium text-neutral-400">Past entries</h2>
         <div className="flex flex-col gap-3">
           {entries?.map((entry) =>
             editingId === entry.id ? (

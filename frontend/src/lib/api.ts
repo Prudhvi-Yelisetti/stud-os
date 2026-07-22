@@ -34,6 +34,13 @@ export interface ChapterTitleMatch {
   notebook_id: string
 }
 
+export interface ChapterVersion {
+  id: string
+  version_number: number
+  content_snapshot: string
+  created_at: string
+}
+
 export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type RepeatRule = 'none' | 'daily' | 'weekly' | 'monthly'

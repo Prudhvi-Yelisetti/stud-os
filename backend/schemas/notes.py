@@ -60,3 +60,12 @@ class ChapterTitleMatch(BaseModel):
     id: str
     title: str
     notebook_id: str
+
+
+class ChapterVersionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    version_number: int
+    content_snapshot: str
+    created_at: datetime

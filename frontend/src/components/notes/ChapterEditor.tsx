@@ -5,6 +5,7 @@ import { AttachmentPanel } from '../attachments/AttachmentPanel'
 import { WikiLinkText } from '../shared/WikiLinkText'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { detectActiveWikiLinkQuery } from '../../lib/wikiLinks'
+import { VersionHistoryPanel } from './VersionHistoryPanel'
 
 export function ChapterEditor({
   chapterId,
@@ -22,6 +23,7 @@ export function ChapterEditor({
   const [titleDraft, setTitleDraft] = useState('')
   const [suggestions, setSuggestions] = useState<{ id: string; title: string; notebook_id: string }[]>([])
   const [linkQueryStart, setLinkQueryStart] = useState<number | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const { data: chapter } = useQuery({
@@ -122,7 +124,7 @@ export function ChapterEditor({
   if (!chapter) return <div className="p-6 text-neutral-500">Loading...</div>
 
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full">
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mb-4 flex items-center justify-between">
           {editingTitle ? (
@@ -174,7 +176,13 @@ export function ChapterEditor({
             >
               📌
             </button>
-            <span className="text-xs text-neutral-500">v{chapter.version}</span>
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+              className="text-xs text-neutral-500 underline decoration-dotted hover:text-neutral-300"
+              title="View version history"
+            >
+              v{chapter.version}
+            </button>
             <button
               onClick={() => {
                 if (confirm(`Delete chapter "${chapter.title}"?`)) deleteChapter.mutate()
@@ -217,7 +225,7 @@ export function ChapterEditor({
             )}
           </div>
         ) : (
-          <div className="h-[calc(100%-3rem)] w-full overflow-y-auto whitespace-pre-wrap rounded bg-neutral-900 p-4 text-sm leading-relaxed">
+          <div className="h-[calc(100%-3rem)] w-full overflow-y-auto rounded bg-neutral-900 p-4">
             <WikiLinkText
               content={content}
               resolvedLinks={resolvedLinks}
@@ -243,6 +251,7 @@ export function ChapterEditor({
         )}
         <AttachmentPanel ownerType="chapter" ownerId={chapterId} />
       </div>
+      {showHistory && <VersionHistoryPanel chapterId={chapterId} onClose={() => setShowHistory(false)} />}
     </div>
   )
 }

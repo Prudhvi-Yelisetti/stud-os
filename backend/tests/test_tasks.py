@@ -105,3 +105,49 @@ def test_project_task_list_surfaces_active_work_before_done(client):
 
     titles_in_order = [t["title"] for t in client.get(f"/api/projects/{proj['id']}/tasks").json()]
     assert titles_in_order == ["Still todo", "Finished"]
+
+
+def test_overdue_task_gets_penalized_when_list_endpoint_is_hit(client):
+    # Give the user some XP first -- penalty XP is clamped at 0, so testing
+    # from a 0 baseline can't observe a decrease.
+    cushion = client.post("/api/tasks", json={"title": "Cushion", "priority": "urgent"}).json()
+    client.post(f"/api/tasks/{cushion['id']}/complete")
+
+    task = client.post(
+        "/api/tasks", json={"title": "Overdue", "priority": "medium", "due_at": "2020-01-01T00:00:00Z"}
+    ).json()
+    assert task["is_penalized"] is False
+
+    profile_before = client.get("/api/gamification/profile").json()
+
+    tasks = client.get("/api/tasks").json()
+    penalized = next(t for t in tasks if t["id"] == task["id"])
+    assert penalized["is_penalized"] is True
+
+    profile_after = client.get("/api/gamification/profile").json()
+    assert profile_after["level"]["current_xp"] < profile_before["level"]["current_xp"]
+
+
+def test_overdue_task_only_penalized_once(client):
+    task = client.post(
+        "/api/tasks", json={"title": "Overdue", "due_at": "2020-01-01T00:00:00Z"}
+    ).json()
+    client.get("/api/tasks")  # first check -- applies the penalty
+    xp_after_first = client.get("/api/gamification/profile").json()["level"]["current_xp"]
+
+    client.get("/api/tasks")  # second check -- should be a no-op
+    xp_after_second = client.get("/api/gamification/profile").json()["level"]["current_xp"]
+
+    assert xp_after_first == xp_after_second
+
+
+def test_future_and_done_tasks_are_never_penalized(client):
+    future = client.post("/api/tasks", json={"title": "Future", "due_at": "2099-01-01T00:00:00Z"}).json()
+    no_due_date = client.post("/api/tasks", json={"title": "No due date"}).json()
+    done = client.post("/api/tasks", json={"title": "Done", "due_at": "2020-01-01T00:00:00Z"}).json()
+    client.post(f"/api/tasks/{done['id']}/complete")
+
+    tasks_by_id = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert tasks_by_id[future["id"]]["is_penalized"] is False
+    assert tasks_by_id[no_due_date["id"]]["is_penalized"] is False
+    assert tasks_by_id[done["id"]]["is_penalized"] is False
