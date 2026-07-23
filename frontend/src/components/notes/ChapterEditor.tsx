@@ -143,7 +143,7 @@ export function ChapterEditor({
   )
 
   return (
-    <div className="relative flex h-full">
+    <div className="relative flex h-full flex-1 overflow-hidden">
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mb-4 flex items-center justify-between">
           {editingTitle ? (

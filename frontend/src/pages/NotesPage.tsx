@@ -80,6 +80,26 @@ export function NotesPage() {
     )
   }
 
+  if (!notebookId) {
+    // Nothing selected yet -- showing the full 3-column skeleton (two of
+    // them just saying "select something") is noisy for no reason. Just
+    // show the notebook list, given more room to breathe.
+    return (
+      <div className="flex h-full justify-center overflow-y-auto">
+        <div className="w-full max-w-md p-6">
+          <NotebookList
+            selectedId={notebookId}
+            onSelect={(id) => {
+              setNotebookId(id)
+              setChapterId(null)
+            }}
+            fullWidth
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full">
       <NotebookList
@@ -89,13 +109,7 @@ export function NotesPage() {
           setChapterId(null)
         }}
       />
-      {notebookId ? (
-        <ChapterList notebookId={notebookId} selectedId={chapterId} onSelect={setChapterId} />
-      ) : (
-        <div className="w-64 shrink-0 border-r border-neutral-800 p-6 text-sm text-neutral-600">
-          Select a notebook
-        </div>
-      )}
+      <ChapterList notebookId={notebookId} selectedId={chapterId} onSelect={setChapterId} />
       {chapterId ? (
         <ChapterEditor chapterId={chapterId} onDeleted={() => setChapterId(null)} onNavigate={handleNavigate} />
       ) : (

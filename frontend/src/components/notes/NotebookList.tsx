@@ -14,6 +14,8 @@ export function NotebookList({
 }) {
   const queryClient = useQueryClient()
   const [newTitle, setNewTitle] = useState('')
+  const [showCreateInput, setShowCreateInput] = useState(false)
+  const [query, setQuery] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
 
@@ -29,6 +31,8 @@ export function NotebookList({
     onSuccess: (nb) => {
       invalidate()
       onSelect(nb.id)
+      setShowCreateInput(false)
+      setNewTitle('')
     },
   })
 
@@ -57,30 +61,53 @@ export function NotebookList({
     setEditingId(null)
   }
 
+  const filteredNotebooks = notebooks?.filter((nb) =>
+    nb.title.toLowerCase().includes(query.trim().toLowerCase()),
+  )
+
   return (
     <div className={fullWidth ? 'w-full p-3' : 'w-56 shrink-0 border-r border-neutral-800 p-3'}>
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-medium text-neutral-400">Notebooks</h2>
+        <button
+          onClick={() => setShowCreateInput((v) => !v)}
+          className="rounded px-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300"
+          title="New notebook"
+        >
+          +
+        </button>
       </div>
-      <form
-        className="mb-3 flex gap-1"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (newTitle.trim()) {
-            createNotebook.mutate(newTitle.trim())
-            setNewTitle('')
-          }
-        }}
-      >
-        <input
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          placeholder="New notebook..."
-          className="w-full rounded bg-neutral-900 px-2 py-1 text-sm outline-none placeholder:text-neutral-600"
-        />
-      </form>
+      {showCreateInput && (
+        <form
+          className="mb-2 flex gap-1"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (newTitle.trim()) createNotebook.mutate(newTitle.trim())
+          }}
+        >
+          <input
+            autoFocus
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setShowCreateInput(false)
+                setNewTitle('')
+              }
+            }}
+            placeholder="Notebook title..."
+            className="w-full rounded bg-neutral-900 px-2 py-1 text-sm outline-none placeholder:text-neutral-600"
+          />
+        </form>
+      )}
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search notebooks..."
+        className="mb-3 w-full rounded bg-neutral-900 px-2 py-1 text-sm text-neutral-400 outline-none placeholder:text-neutral-600"
+      />
       <div className="flex flex-col gap-1">
-        {notebooks?.map((nb) => (
+        {filteredNotebooks?.map((nb) => (
           <div
             key={nb.id}
             className={`group flex items-center rounded px-2 py-1.5 text-sm ${
@@ -125,6 +152,12 @@ export function NotebookList({
             )}
           </div>
         ))}
+        {filteredNotebooks?.length === 0 && notebooks && notebooks.length > 0 && (
+          <p className="px-2 py-1.5 text-sm text-neutral-600">No notebooks match "{query}".</p>
+        )}
+        {notebooks?.length === 0 && (
+          <p className="px-2 py-1.5 text-sm text-neutral-600">No notebooks yet — click + to create one.</p>
+        )}
       </div>
     </div>
   )
