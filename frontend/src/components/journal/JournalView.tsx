@@ -86,8 +86,8 @@ export function JournalView() {
   }
 
   return (
-    <div className="flex h-full">
-      <div className="w-96 shrink-0 border-r border-neutral-800 p-6">
+    <div className="flex h-full flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <div className="w-full shrink-0 border-b border-neutral-800 p-6 md:w-96 md:border-b-0 md:border-r">
         <h1 className="mb-4 text-xl font-semibold">New entry</h1>
         <form
           className="flex flex-col gap-3"
@@ -130,7 +130,7 @@ export function JournalView() {
         </form>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 p-6 md:overflow-y-auto">
         {entries && entries.length > 0 && <MoodHeatmap entries={entries} />}
         <h2 className="mb-3 mt-6 text-sm font-medium text-neutral-400">Past entries</h2>
         <div className="flex flex-col gap-3">

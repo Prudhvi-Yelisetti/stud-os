@@ -24,6 +24,7 @@ export function ChapterEditor({
   const [suggestions, setSuggestions] = useState<{ id: string; title: string; notebook_id: string }[]>([])
   const [linkQueryStart, setLinkQueryStart] = useState<number | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [showSidePanel, setShowSidePanel] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const { data: chapter } = useQuery({
@@ -123,6 +124,24 @@ export function ChapterEditor({
 
   if (!chapter) return <div className="p-6 text-neutral-500">Loading...</div>
 
+  const sidePanelContent = (
+    <>
+      <h2 className="mb-2 text-sm font-medium text-neutral-400">Referenced by</h2>
+      {backlinks && backlinks.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {backlinks.map((b) => (
+            <li key={b.id} className="rounded px-2 py-1 text-sm text-neutral-300 hover:bg-neutral-900">
+              {b.title}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-neutral-600">No backlinks yet.</p>
+      )}
+      <AttachmentPanel ownerType="chapter" ownerId={chapterId} />
+    </>
+  )
+
   return (
     <div className="relative flex h-full">
       <div className="flex-1 overflow-y-auto p-6">
@@ -169,6 +188,13 @@ export function ChapterEditor({
                 Preview
               </button>
             </div>
+            <button
+              onClick={() => setShowSidePanel(true)}
+              className="text-sm text-neutral-500 hover:text-neutral-300 md:hidden"
+              title="Backlinks & attachments"
+            >
+              🔗
+            </button>
             <button
               onClick={() => togglePin.mutate(!chapter.pinned)}
               className={`text-sm ${chapter.pinned ? 'text-yellow-400' : 'text-neutral-600 hover:text-neutral-400'}`}
@@ -236,21 +262,15 @@ export function ChapterEditor({
           </div>
         )}
       </div>
-      <div className="w-64 shrink-0 border-l border-neutral-800 p-4">
-        <h2 className="mb-2 text-sm font-medium text-neutral-400">Referenced by</h2>
-        {backlinks && backlinks.length > 0 ? (
-          <ul className="flex flex-col gap-1">
-            {backlinks.map((b) => (
-              <li key={b.id} className="rounded px-2 py-1 text-sm text-neutral-300 hover:bg-neutral-900">
-                {b.title}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-neutral-600">No backlinks yet.</p>
-        )}
-        <AttachmentPanel ownerType="chapter" ownerId={chapterId} />
-      </div>
+      <div className="hidden w-64 shrink-0 border-l border-neutral-800 p-4 md:block">{sidePanelContent}</div>
+      {showSidePanel && (
+        <div className="absolute inset-y-0 right-0 z-10 w-full max-w-xs overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-4 shadow-xl md:hidden">
+          <button onClick={() => setShowSidePanel(false)} className="mb-3 text-sm text-neutral-500 hover:text-neutral-300">
+            ✕ Close
+          </button>
+          {sidePanelContent}
+        </div>
+      )}
       {showHistory && <VersionHistoryPanel chapterId={chapterId} onClose={() => setShowHistory(false)} />}
     </div>
   )

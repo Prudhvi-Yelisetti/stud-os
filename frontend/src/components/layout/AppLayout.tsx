@@ -1,4 +1,5 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { GamificationWidget } from '../gamification/GamificationWidget'
 import { GlobalSearch } from '../search/GlobalSearch'
 
@@ -14,9 +15,26 @@ const navItems = [
 ]
 
 export function AppLayout() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const location = useLocation()
+
+  // Close the drawer automatically on navigation instead of requiring an
+  // explicit tap outside it -- the common mobile-nav pattern.
+  useEffect(() => setMobileMenuOpen(false), [location.pathname])
+
   return (
     <div className="flex h-screen bg-neutral-950 text-neutral-100">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-neutral-800 p-4">
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`${mobileMenuOpen ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-64 flex-col
+          border-r border-neutral-800 bg-neutral-950 p-4 md:static md:z-auto md:flex md:w-56`}
+      >
         <h1 className="mb-6 text-lg font-semibold tracking-tight">Stud-OS</h1>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
@@ -36,9 +54,20 @@ export function AppLayout() {
         </nav>
         <GamificationWidget />
       </aside>
+
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex shrink-0 items-center justify-end border-b border-neutral-800 px-4 py-2">
-          <GlobalSearch />
+        <header className="flex shrink-0 items-center gap-3 border-b border-neutral-800 px-4 py-2">
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="rounded p-1.5 text-neutral-400 hover:bg-neutral-900 md:hidden"
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
+          <div className="flex-1 md:hidden" />
+          <div className="ml-auto">
+            <GlobalSearch />
+          </div>
         </header>
         <main className="flex-1 overflow-hidden">
           <Outlet />

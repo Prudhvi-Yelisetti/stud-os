@@ -46,7 +46,7 @@ export function Dashboard() {
           <p className="mb-4 text-sm text-neutral-400">
             Nothing here yet — this dashboard fills in as you use the app. A few places to start:
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Link to="/notes" className="rounded bg-neutral-800 px-3 py-2 text-sm hover:bg-neutral-700">
               📓 Write your first note
             </Link>
@@ -60,7 +60,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Widget title="Tasks Due">
           <ul className="flex flex-col gap-1.5 text-sm">
             {pendingTasks.slice(0, 6).map((t) => {

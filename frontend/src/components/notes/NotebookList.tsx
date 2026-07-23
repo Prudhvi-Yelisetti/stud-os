@@ -6,9 +6,11 @@ import type { Notebook } from '../../lib/api'
 export function NotebookList({
   selectedId,
   onSelect,
+  fullWidth,
 }: {
   selectedId: string | null
   onSelect: (id: string) => void
+  fullWidth?: boolean
 }) {
   const queryClient = useQueryClient()
   const [newTitle, setNewTitle] = useState('')
@@ -56,7 +58,7 @@ export function NotebookList({
   }
 
   return (
-    <div className="w-56 shrink-0 border-r border-neutral-800 p-3">
+    <div className={fullWidth ? 'w-full p-3' : 'w-56 shrink-0 border-r border-neutral-800 p-3'}>
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-medium text-neutral-400">Notebooks</h2>
       </div>

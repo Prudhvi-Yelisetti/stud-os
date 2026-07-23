@@ -94,7 +94,7 @@ export function KanbanBoard() {
         )}
       </div>
       <form
-        className="mb-4 flex gap-2"
+        className="mb-4 flex flex-wrap gap-2"
         onSubmit={(e) => {
           e.preventDefault()
           if (newTitle.trim()) {
@@ -140,9 +140,12 @@ export function KanbanBoard() {
           <option value="monthly">Monthly</option>
         </select>
       </form>
-      <div className="grid flex-1 grid-cols-4 gap-4 overflow-hidden">
+      <div className="flex flex-1 gap-4 overflow-x-auto md:grid md:grid-cols-4 md:overflow-visible">
         {COLUMNS.map((col) => (
-          <div key={col.status} className="flex flex-col overflow-hidden rounded bg-neutral-900/50 p-3">
+          <div
+            key={col.status}
+            className="flex w-[85vw] shrink-0 flex-col overflow-hidden rounded bg-neutral-900/50 p-3 sm:w-72 md:w-auto md:shrink"
+          >
             <h2 className="mb-3 text-sm font-medium text-neutral-400">
               {col.label} ({byStatus(col.status).length})
             </h2>

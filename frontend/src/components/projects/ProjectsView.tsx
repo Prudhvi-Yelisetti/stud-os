@@ -64,8 +64,10 @@ export function ProjectsView() {
   }, [selectedProject?.id])
 
   return (
-    <div className="flex h-full">
-      <div className="w-64 shrink-0 border-r border-neutral-800 p-3">
+    <div className="flex h-full flex-col md:flex-row">
+      <div
+        className={`${selectedId ? 'hidden md:block' : 'block'} w-full shrink-0 border-neutral-800 p-3 md:w-64 md:border-r`}
+      >
         <h2 className="mb-2 text-sm font-medium text-neutral-400">Projects</h2>
         <form
           className="mb-3 flex gap-1"
@@ -128,10 +130,16 @@ export function ProjectsView() {
           ))}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className={`${selectedId ? 'block' : 'hidden md:block'} flex-1 overflow-y-auto p-6`}>
         {!selectedId && <p className="text-sm text-neutral-600">Select a project</p>}
         {selectedId && (
           <>
+            <button
+              onClick={() => setSelectedId(null)}
+              className="mb-4 text-left text-sm text-neutral-400 md:hidden"
+            >
+              ← Projects
+            </button>
             <h1 className="mb-2 text-xl font-semibold">{selectedProject?.title}</h1>
             <textarea
               value={descDraft}

@@ -6,10 +6,12 @@ export function ChapterList({
   notebookId,
   selectedId,
   onSelect,
+  fullWidth,
 }: {
   notebookId: string
   selectedId: string | null
   onSelect: (id: string) => void
+  fullWidth?: boolean
 }) {
   const queryClient = useQueryClient()
   const [newTitle, setNewTitle] = useState('')
@@ -36,7 +38,7 @@ export function ChapterList({
   })
 
   return (
-    <div className="w-64 shrink-0 border-r border-neutral-800 p-3">
+    <div className={fullWidth ? 'w-full p-3' : 'w-64 shrink-0 border-r border-neutral-800 p-3'}>
       <h2 className="mb-2 text-sm font-medium text-neutral-400">Chapters</h2>
       <form
         className="mb-3 flex gap-1"

@@ -25,7 +25,7 @@ export function VersionHistoryPanel({
   })
 
   return (
-    <div className="absolute inset-y-0 right-0 z-10 w-80 overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-4 shadow-xl">
+    <div className="absolute inset-y-0 right-0 z-10 w-full max-w-xs overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-4 shadow-xl sm:max-w-sm md:w-80 md:max-w-none">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-neutral-300">Version history</h2>
         <button onClick={onClose} className="text-neutral-500 hover:text-neutral-300">
