@@ -62,8 +62,17 @@ export function KnowledgeGraphView() {
     return { nodes: flowNodes, edges: flowEdges }
   }, [data])
 
+  const isEmpty = data && data.nodes.length === 0
+
   return (
-    <div className="h-full">
+    <div className="relative h-full">
+      {isEmpty && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <p className="text-sm text-neutral-600">
+            Nothing to visualize yet — add notebooks, chapters, tasks, or projects to see them connected here.
+          </p>
+        </div>
+      )}
       <ReactFlow nodes={nodes} edges={edges} fitView colorMode="dark">
         <Background />
         <Controls />
