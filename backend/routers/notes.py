@@ -1,10 +1,16 @@
+import io
+import os
+import re
+import zipfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.database.session import get_db
 from backend.database.models.notes import Notebook, Chapter, ChapterLink, ChapterVersion
+from backend.database.models.attachments import Attachment
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.notes import (
@@ -14,6 +20,15 @@ from backend.schemas.notes import (
 from backend.utils.wiki_parser import extract_wiki_links
 
 router = APIRouter(prefix="/api/notebooks", tags=["notes"])
+
+
+def _safe_filename(title: str) -> str:
+    cleaned = re.sub(r'[^\w\- ]', '_', title).strip()
+    return cleaned or "untitled"
+
+
+def _chapter_markdown(chapter: Chapter) -> str:
+    return f"# {chapter.title}\n\n{chapter.content}"
 
 
 def _get_notebook_or_404(db: Session, notebook_id: str, user: User) -> Notebook:
@@ -81,6 +96,40 @@ def trash_notebook(notebook_id: str, db: Session = Depends(get_db), user: User =
     nb.is_trashed = True
     nb.trashed_at = datetime.now(timezone.utc)
     db.commit()
+
+
+@router.get("/{notebook_id}/export")
+def export_notebook(notebook_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Zip of every chapter as its own .md file, with each chapter's
+    attachments (if any) alongside it under attachments/<chapter title>/."""
+    nb = _get_notebook_or_404(db, notebook_id, user)
+    chapters = (
+        db.query(Chapter)
+        .filter(Chapter.notebook_id == notebook_id, Chapter.is_trashed.is_(False))
+        .all()
+    )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for ch in chapters:
+            base = _safe_filename(ch.title)
+            zf.writestr(f"{base}.md", _chapter_markdown(ch))
+            attachments = (
+                db.query(Attachment)
+                .filter(Attachment.owner_type == "chapter", Attachment.owner_id == ch.id)
+                .all()
+            )
+            for att in attachments:
+                if os.path.exists(att.stored_path):
+                    zf.write(att.stored_path, arcname=f"attachments/{base}/{att.filename}")
+    buf.seek(0)
+
+    filename = f"{_safe_filename(nb.title)}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _sync_wiki_links(db: Session, chapter: Chapter) -> None:
@@ -199,6 +248,38 @@ def trash_chapter(chapter_id: str, db: Session = Depends(get_db)):
     ch.is_trashed = True
     ch.trashed_at = datetime.now(timezone.utc)
     db.commit()
+
+
+@router.get("/chapters/{chapter_id}/export")
+def export_chapter(chapter_id: str, db: Session = Depends(get_db)):
+    """Plain .md download, or a zip alongside its attachments if it has any."""
+    ch = _get_chapter_or_404(db, chapter_id)
+    base = _safe_filename(ch.title)
+    attachments = (
+        db.query(Attachment)
+        .filter(Attachment.owner_type == "chapter", Attachment.owner_id == ch.id)
+        .all()
+    )
+
+    if not attachments:
+        return Response(
+            content=_chapter_markdown(ch),
+            media_type="text/markdown",
+            headers={"Content-Disposition": f'attachment; filename="{base}.md"'},
+        )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"{base}.md", _chapter_markdown(ch))
+        for att in attachments:
+            if os.path.exists(att.stored_path):
+                zf.write(att.stored_path, arcname=f"attachments/{att.filename}")
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{base}.zip"'},
+    )
 
 
 @router.get("/chapters/{chapter_id}/backlinks", response_model=list[BacklinkOut])

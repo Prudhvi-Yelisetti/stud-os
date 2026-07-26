@@ -104,3 +104,47 @@ def test_restore_unknown_version_returns_404(client):
     ch = client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "C"}).json()
     resp = client.post(f"/api/notebooks/chapters/{ch['id']}/versions/does-not-exist/restore")
     assert resp.status_code == 404
+
+
+def test_export_chapter_without_attachments_returns_markdown(client):
+    nb = client.post("/api/notebooks", json={"title": "NB"}).json()
+    ch = client.post(
+        f"/api/notebooks/{nb['id']}/chapters", json={"title": "My Chapter", "content": "body text"}
+    ).json()
+
+    resp = client.get(f"/api/notebooks/chapters/{ch['id']}/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/markdown")
+    assert 'filename="My Chapter.md"' in resp.headers["content-disposition"]
+    assert "# My Chapter" in resp.text
+    assert "body text" in resp.text
+
+
+def test_export_chapter_with_attachments_returns_zip(client, tmp_path, monkeypatch):
+    from backend.routers import attachments as attachments_router
+    monkeypatch.setattr(attachments_router, "UPLOAD_DIR", str(tmp_path))
+
+    nb = client.post("/api/notebooks", json={"title": "NB"}).json()
+    ch = client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "C"}).json()
+    files = {"file": ("note.txt", b"hello", "text/plain")}
+    client.post("/api/attachments", params={"owner_type": "chapter", "owner_id": ch["id"]}, files=files)
+
+    resp = client.get(f"/api/notebooks/chapters/{ch['id']}/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/zip"
+    assert 'filename="C.zip"' in resp.headers["content-disposition"]
+
+
+def test_export_notebook_returns_zip_of_all_chapters(client):
+    nb = client.post("/api/notebooks", json={"title": "Export NB"}).json()
+    client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "A", "content": "a"})
+    client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "B", "content": "b"})
+
+    resp = client.get(f"/api/notebooks/{nb['id']}/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/zip"
+    assert 'filename="Export NB.zip"' in resp.headers["content-disposition"]
+
+    import io, zipfile
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+    assert set(zf.namelist()) == {"A.md", "B.md"}

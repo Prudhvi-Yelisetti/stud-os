@@ -28,4 +28,6 @@ export const notebooksApi = {
     api.get<ChapterVersion[]>(`/notebooks/chapters/${chapterId}/versions`).then((r) => r.data),
   restoreVersion: (chapterId: string, versionId: string) =>
     api.post<Chapter>(`/notebooks/chapters/${chapterId}/versions/${versionId}/restore`).then((r) => r.data),
+  exportNotebookUrl: (notebookId: string) => `/api/notebooks/${notebookId}/export`,
+  exportChapterUrl: (chapterId: string) => `/api/notebooks/chapters/${chapterId}/export`,
 }

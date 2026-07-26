@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notebooksApi } from '../../lib/notebooks'
 import type { Notebook } from '../../lib/api'
+import { DropdownMenu } from '../shared/DropdownMenu'
+import { NotebookFormModal } from './NotebookFormModal'
 
 export function NotebookList({
   selectedId,
@@ -13,11 +15,9 @@ export function NotebookList({
   fullWidth?: boolean
 }) {
   const queryClient = useQueryClient()
-  const [newTitle, setNewTitle] = useState('')
-  const [showCreateInput, setShowCreateInput] = useState(false)
   const [query, setQuery] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editTitle, setEditTitle] = useState('')
+  const [modalMode, setModalMode] = useState<'create' | null>(null)
+  const [editingNotebook, setEditingNotebook] = useState<Notebook | null>(null)
 
   const { data: notebooks } = useQuery({
     queryKey: ['notebooks'],
@@ -27,18 +27,21 @@ export function NotebookList({
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['notebooks'] })
 
   const createNotebook = useMutation({
-    mutationFn: (title: string) => notebooksApi.create({ title }),
+    mutationFn: (data: { title: string; description?: string }) => notebooksApi.create(data),
     onSuccess: (nb) => {
       invalidate()
       onSelect(nb.id)
-      setShowCreateInput(false)
-      setNewTitle('')
+      setModalMode(null)
     },
   })
 
-  const renameNotebook = useMutation({
-    mutationFn: ({ id, title }: { id: string; title: string }) => notebooksApi.update(id, { title }),
-    onSuccess: invalidate,
+  const updateNotebook = useMutation({
+    mutationFn: ({ id, title, description }: { id: string; title: string; description: string }) =>
+      notebooksApi.update(id, { title, description }),
+    onSuccess: () => {
+      invalidate()
+      setEditingNotebook(null)
+    },
   })
 
   const deleteNotebook = useMutation({
@@ -49,18 +52,6 @@ export function NotebookList({
     },
   })
 
-  function startEdit(nb: Notebook) {
-    setEditingId(nb.id)
-    setEditTitle(nb.title)
-  }
-
-  function commitEdit() {
-    if (editingId && editTitle.trim()) {
-      renameNotebook.mutate({ id: editingId, title: editTitle.trim() })
-    }
-    setEditingId(null)
-  }
-
   const filteredNotebooks = notebooks?.filter((nb) =>
     nb.title.toLowerCase().includes(query.trim().toLowerCase()),
   )
@@ -70,36 +61,13 @@ export function NotebookList({
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-medium text-neutral-400">Notebooks</h2>
         <button
-          onClick={() => setShowCreateInput((v) => !v)}
+          onClick={() => setModalMode('create')}
           className="rounded px-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300"
           title="New notebook"
         >
           +
         </button>
       </div>
-      {showCreateInput && (
-        <form
-          className="mb-2 flex gap-1"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (newTitle.trim()) createNotebook.mutate(newTitle.trim())
-          }}
-        >
-          <input
-            autoFocus
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setShowCreateInput(false)
-                setNewTitle('')
-              }
-            }}
-            placeholder="Notebook title..."
-            className="w-full rounded bg-neutral-900 px-2 py-1 text-sm outline-none placeholder:text-neutral-600"
-          />
-        </form>
-      )}
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -114,42 +82,32 @@ export function NotebookList({
               selectedId === nb.id ? 'bg-neutral-800' : 'hover:bg-neutral-900'
             }`}
           >
-            {editingId === nb.id ? (
-              <input
-                autoFocus
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onBlur={commitEdit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitEdit()
-                  if (e.key === 'Escape') setEditingId(null)
-                }}
-                className="w-full bg-transparent outline-none"
+            <button
+              onClick={() => onSelect(nb.id)}
+              className={`flex-1 truncate text-left ${selectedId === nb.id ? 'text-white' : 'text-neutral-300'}`}
+            >
+              {nb.title}
+            </button>
+            <div className="opacity-0 group-hover:opacity-100">
+              <DropdownMenu
+                items={[
+                  { label: 'Edit', onClick: () => setEditingNotebook(nb) },
+                  {
+                    label: 'Export as .zip',
+                    onClick: () => window.open(notebooksApi.exportNotebookUrl(nb.id), '_blank'),
+                  },
+                  {
+                    label: 'Delete',
+                    danger: true,
+                    onClick: () => {
+                      if (confirm(`Delete notebook "${nb.title}" and all its chapters?`)) {
+                        deleteNotebook.mutate(nb.id)
+                      }
+                    },
+                  },
+                ]}
               />
-            ) : (
-              <button
-                onClick={() => onSelect(nb.id)}
-                onDoubleClick={() => startEdit(nb)}
-                className={`flex-1 truncate text-left ${
-                  selectedId === nb.id ? 'text-white' : 'text-neutral-300'
-                }`}
-              >
-                {nb.title}
-              </button>
-            )}
-            {editingId !== nb.id && (
-              <button
-                onClick={() => {
-                  if (confirm(`Delete notebook "${nb.title}" and all its chapters?`)) {
-                    deleteNotebook.mutate(nb.id)
-                  }
-                }}
-                className="ml-1 hidden text-neutral-600 hover:text-red-400 group-hover:inline"
-                title="Delete"
-              >
-                ✕
-              </button>
-            )}
+            </div>
           </div>
         ))}
         {filteredNotebooks?.length === 0 && notebooks && notebooks.length > 0 && (
@@ -159,6 +117,24 @@ export function NotebookList({
           <p className="px-2 py-1.5 text-sm text-neutral-600">No notebooks yet — click + to create one.</p>
         )}
       </div>
+
+      {modalMode === 'create' && (
+        <NotebookFormModal
+          onSubmit={(title, description) => createNotebook.mutate({ title, description })}
+          onClose={() => setModalMode(null)}
+          submitting={createNotebook.isPending}
+        />
+      )}
+      {editingNotebook && (
+        <NotebookFormModal
+          initial={{ title: editingNotebook.title, description: editingNotebook.description }}
+          onSubmit={(title, description) =>
+            updateNotebook.mutate({ id: editingNotebook.id, title, description })
+          }
+          onClose={() => setEditingNotebook(null)}
+          submitting={updateNotebook.isPending}
+        />
+      )}
     </div>
   )
 }
