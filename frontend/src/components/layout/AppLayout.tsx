@@ -35,7 +35,7 @@ export function AppLayout() {
         className={`${mobileMenuOpen ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-64 flex-col
           border-r border-neutral-800 bg-neutral-950 p-4 md:static md:z-auto md:flex md:w-56`}
       >
-        <h1 className="mb-6 text-lg font-semibold tracking-tight">Stud-OS</h1>
+        <h1 className="mb-6 text-xl font-semibold tracking-tight">Stud-OS</h1>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
             <NavLink
@@ -43,7 +43,7 @@ export function AppLayout() {
               to={item.to}
               end={item.to === '/'}
               className={({ isActive }) =>
-                `rounded px-3 py-2 text-sm ${
+                `rounded px-3 py-2 text-base ${
                   isActive ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-900'
                 }`
               }

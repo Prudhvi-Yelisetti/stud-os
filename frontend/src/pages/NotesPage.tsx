@@ -45,38 +45,36 @@ export function NotesPage() {
   }
 
   if (!notebookId) {
-    // Nothing selected yet -- just show the notebook list, centered, with
-    // room to breathe rather than a skeleton of empty columns.
+    // Nothing selected yet -- full-width notebook grid, no dead columns.
     return (
-      <div className="flex h-full justify-center overflow-y-auto">
-        <div className="w-full max-w-md p-6">
-          <NotebookList
-            selectedId={notebookId}
-            onSelect={(id) => {
-              setNotebookId(id)
-              setChapterId(null)
-            }}
-            fullWidth
-          />
-        </div>
+      <div className="h-full overflow-y-auto">
+        <NotebookList
+          selectedId={notebookId}
+          onSelect={(id) => {
+            setNotebookId(id)
+            setChapterId(null)
+          }}
+          fullWidth
+        />
       </div>
     )
   }
 
   if (!chapterId) {
-    // Notebook chosen, no chapter yet -- a 3rd column that just says
-    // "select a chapter" added nothing. One focused view: back button,
-    // notebook name, chapter list. Same shape on mobile and desktop.
+    // Notebook chosen, no chapter yet -- full-width chapter grid, with a
+    // slim header (back button + notebook name) above it.
     return (
-      <div className="flex h-full justify-center overflow-y-auto">
-        <div className="w-full max-w-md p-6">
+      <div className="flex h-full flex-col">
+        <div className="shrink-0 border-b border-neutral-800 p-4">
           <button
             onClick={() => setNotebookId(null)}
-            className="mb-3 text-sm text-neutral-400 hover:text-neutral-200"
+            className="mb-1 text-sm text-neutral-400 hover:text-neutral-200"
           >
             ← Notebooks
           </button>
-          <h1 className="mb-4 text-lg font-semibold">{notebook?.title}</h1>
+          <h1 className="text-xl font-semibold">{notebook?.title}</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto">
           <ChapterList notebookId={notebookId} selectedId={chapterId} onSelect={setChapterId} fullWidth />
         </div>
       </div>
@@ -101,8 +99,8 @@ export function NotesPage() {
 
   return (
     <div className="flex h-full">
-      <div className="flex w-64 shrink-0 flex-col border-r border-neutral-800">
-        <div className="border-b border-neutral-800 p-3">
+      <div className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-neutral-800">
+        <div className="shrink-0 border-b border-neutral-800 p-3">
           <button
             onClick={() => setNotebookId(null)}
             className="mb-1 text-xs text-neutral-500 hover:text-neutral-300"
@@ -112,7 +110,7 @@ export function NotesPage() {
           <h1 className="truncate text-sm font-medium">{notebook?.title}</h1>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <ChapterList notebookId={notebookId} selectedId={chapterId} onSelect={setChapterId} fullWidth />
+          <ChapterList notebookId={notebookId} selectedId={chapterId} onSelect={setChapterId} />
         </div>
       </div>
       <ChapterEditor chapterId={chapterId} onDeleted={() => setChapterId(null)} onNavigate={handleNavigate} />
