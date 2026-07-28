@@ -1,5 +1,5 @@
 """
-End-to-end smoke test against a running backend (localhost:8000).
+End-to-end smoke test against a running backend (localhost:8420).
 Exercises the full feature surface with real HTTP calls -- not a
 substitute for unit tests, but catches integration regressions cheaply.
 
@@ -10,7 +10,7 @@ Usage:
 import requests, sys, json
 from datetime import datetime, timedelta, timezone
 
-B = "http://localhost:8000/api"
+B = "http://localhost:8420/api"
 results = []
 
 def check(name, cond, detail=""):

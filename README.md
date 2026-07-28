@@ -24,7 +24,7 @@ See `REBUILD_PLAN.md` for the full data model and phase-by-phase history.
 ```bash
 cd backend
 ../.venv/bin/python -m alembic -c alembic.ini upgrade head   # from repo root instead: alembic -c backend/alembic.ini upgrade head
-../.venv/bin/python -m uvicorn backend.main:app --reload --port 8000
+../.venv/bin/python -m uvicorn backend.main:app --reload --port 8420
 ```
 Run alembic commands from the **repo root**, not `backend/`:
 ```bash
@@ -38,7 +38,8 @@ npm install   # first time only
 npm run dev
 ```
 Visit http://localhost:5173 — the dev server proxies `/api` to the
-backend on port 8000.
+backend on port 8420. (Not 8000 — that's used by other projects on this
+machine; see vite.config.ts if you ever need to change it again.)
 
 ## Testing
 
