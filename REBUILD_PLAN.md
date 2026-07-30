@@ -247,3 +247,24 @@ the fix is the same regardless of cause:
 ---
 *This plan lives at `REBUILD_PLAN.md` in the project root. If recovery*
 *succeeds, treat this as a retrospective/roadmap doc instead of a rebuild spec.*
+
+---
+
+## Addendum: outcome (written after the fact)
+
+Recovery failed; this plan was executed for real, starting from an empty
+directory. **Result: succeeded.** Every item through Tier 3 got built,
+plus everything from the vision doc's V1 checklist (Timeline, Trash,
+Attachments) that this plan's tiers didn't explicitly call out by name.
+
+Two deliberate deviations from §3's architecture, worth knowing before
+assuming they're in the codebase:
+- **No TipTap.** The editor ended up as a plain `<textarea>` for writing,
+  with a separate Preview mode that renders full markdown (via `marked`)
+  plus clickable `[[wiki-links]]`. Simpler, and got the job done.
+- **No Zustand.** TanStack Query + local component state covered every
+  case that came up; a global store was never actually needed.
+
+This file is now historical — it answers "why does the schema/priority
+order look like this," not "what's the current state." For that, see
+`HANDOFF.md`.
