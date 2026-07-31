@@ -59,6 +59,12 @@ search_results = requests.get(f"{B}/search", params={"q":"QA"}).json()
 types_found = {r["type"] for r in search_results}
 check("search finds across types", {"chapter","task","journal","notebook","project"} & types_found == {"chapter","task","journal"} or len(types_found) >= 3, types_found)
 
+sem_ch = requests.post(f"{B}/notebooks/{nb['id']}/chapters", json={"title":"Photosynthesis","content":"Plants convert sunlight into chemical energy using chlorophyll in their leaves."}).json()
+sem_results = requests.get(f"{B}/search/semantic", params={"q":"how plants make energy from light"}).json()
+check("semantic search finds conceptual match", any(r["id"]==sem_ch["id"] for r in sem_results), sem_results)
+sem_empty = requests.get(f"{B}/search/semantic", params={"q":""}).json()
+check("semantic search empty query returns empty list", sem_empty == [])
+
 # --- Graph ---
 graph = requests.get(f"{B}/graph").json()
 check("graph has nodes", len(graph["nodes"]) > 0, len(graph["nodes"]))

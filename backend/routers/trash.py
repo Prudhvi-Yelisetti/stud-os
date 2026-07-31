@@ -11,8 +11,13 @@ from backend.database.models.journal import JournalEntry
 from backend.database.models.projects import Project
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
+from backend.ai.indexing import delete_chunks_for
 
 router = APIRouter(prefix="/api/trash", tags=["trash"])
+
+# item_type keys here match Chunk.parent_type values written by the
+# notes/journal routers -- only types that actually get indexed appear.
+_INDEXED_TYPES = {"chapter", "journal"}
 
 TRASHABLE = {
     "notebook": Notebook,
@@ -99,6 +104,16 @@ def permanently_delete(item_type: str, item_id: str, db: Session = Depends(get_d
 
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
+
+    if item_type in _INDEXED_TYPES:
+        delete_chunks_for(db, parent_type=item_type, parent_id=item.id)
+    elif item_type == "notebook":
+        # Chapters cascade-delete via the ORM relationship, but their
+        # Chunk rows don't (Chunk is polymorphic, not a real FK relation)
+        # -- clean those up explicitly or they'd become orphaned vectors.
+        chapter_ids = [c.id for c in db.query(Chapter).filter(Chapter.notebook_id == item.id).all()]
+        for chapter_id in chapter_ids:
+            delete_chunks_for(db, parent_type="chapter", parent_id=chapter_id)
 
     db.delete(item)
     db.commit()

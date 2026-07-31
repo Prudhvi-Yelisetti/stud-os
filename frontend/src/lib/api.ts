@@ -129,6 +129,14 @@ export interface SearchResult {
   snippet: string | null
 }
 
+export interface SemanticSearchResult {
+  type: 'chapter' | 'journal'
+  id: string
+  title: string
+  snippet: string
+  score: number
+}
+
 export interface GraphNode {
   id: string
   type: 'notebook' | 'chapter' | 'task' | 'project' | 'journal'

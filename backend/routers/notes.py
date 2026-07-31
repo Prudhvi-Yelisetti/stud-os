@@ -18,6 +18,7 @@ from backend.schemas.notes import (
     ChapterCreate, ChapterUpdate, ChapterOut, BacklinkOut, ChapterTitleMatch, ChapterVersionOut,
 )
 from backend.utils.wiki_parser import extract_wiki_links
+from backend.ai.indexing import reindex
 
 router = APIRouter(prefix="/api/notebooks", tags=["notes"])
 
@@ -132,6 +133,23 @@ def export_notebook(notebook_id: str, db: Session = Depends(get_db), user: User 
     )
 
 
+def _reindex_chapter(db: Session, chapter: Chapter) -> None:
+    """Re-embed this chapter's content for semantic search. Chapter has no
+    user_id of its own (see ChapterLink comment pattern) -- scope through
+    its notebook, same as everywhere else chapter ownership is needed."""
+    notebook = db.query(Notebook).filter(Notebook.id == chapter.notebook_id).first()
+    if notebook is None:
+        return
+    reindex(
+        db,
+        user_id=notebook.user_id,
+        parent_type="chapter",
+        parent_id=chapter.id,
+        parent_title=chapter.title,
+        content=chapter.content,
+    )
+
+
 def _sync_wiki_links(db: Session, chapter: Chapter) -> None:
     """Re-derive this chapter's outgoing links from its current content."""
     db.query(ChapterLink).filter(ChapterLink.from_chapter_id == chapter.id).delete()
@@ -174,6 +192,7 @@ def create_chapter(
     db.commit()
     db.refresh(ch)
     _sync_wiki_links(db, ch)
+    _reindex_chapter(db, ch)
     db.commit()
     return ch
 
@@ -237,6 +256,9 @@ def update_chapter(chapter_id: str, payload: ChapterUpdate, db: Session = Depend
 
     if "content" in data:
         _sync_wiki_links(db, ch)
+
+    if "content" in data or "title" in data:
+        _reindex_chapter(db, ch)
         db.commit()
 
     return ch
@@ -330,5 +352,6 @@ def restore_chapter_version(chapter_id: str, version_id: str, db: Session = Depe
     db.refresh(ch)
 
     _sync_wiki_links(db, ch)
+    _reindex_chapter(db, ch)
     db.commit()
     return ch

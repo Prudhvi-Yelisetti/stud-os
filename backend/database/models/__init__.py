@@ -9,3 +9,4 @@ from backend.database.models.gamification import (  # noqa: F401
     XPLog, Level, Badge, UserBadge, Streak, Penalty,
 )
 from backend.database.models.attachments import Attachment  # noqa: F401
+from backend.database.models.ai import Chunk  # noqa: F401

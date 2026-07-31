@@ -8,8 +8,20 @@ from backend.database.models.journal import JournalEntry
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.journal import JournalEntryCreate, JournalEntryUpdate, JournalEntryOut
+from backend.ai.indexing import reindex
 
 router = APIRouter(prefix="/api/journal", tags=["journal"])
+
+
+def _reindex_entry(db: Session, entry: JournalEntry) -> None:
+    reindex(
+        db,
+        user_id=entry.user_id,
+        parent_type="journal",
+        parent_id=entry.id,
+        parent_title=entry.title,
+        content=entry.content,
+    )
 
 
 def _get_entry_or_404(db: Session, entry_id: str, user: User) -> JournalEntry:
@@ -41,6 +53,8 @@ def create_entry(
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    _reindex_entry(db, entry)
+    db.commit()
     return entry
 
 
@@ -52,10 +66,14 @@ def update_entry(
     user: User = Depends(get_current_user),
 ):
     entry = _get_entry_or_404(db, entry_id, user)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
         setattr(entry, field, value)
     db.commit()
     db.refresh(entry)
+    if "content" in data or "title" in data:
+        _reindex_entry(db, entry)
+        db.commit()
     return entry
 
 
