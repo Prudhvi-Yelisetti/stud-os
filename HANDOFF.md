@@ -16,6 +16,14 @@ Vite frontend. Repo: https://github.com/Prudhvi-Yelisetti/stud-os
 **Current state: V1 is complete, tested, and genuinely usable daily.**
 Not a prototype — every feature below was built, then verified with real
 HTTP calls and/or a real browser (Playwright), not just "should work."
+**Semantic search (AI layer, Phase 1) is also done** — see §3 and §7.
+
+**Going open-source, not just personal use.** Decided in the AI-layer
+conversation (§7) — this shapes design choices going forward: no
+hardcoded secrets, provider abstraction so contributors/users bring
+their own API keys, README should be written for someone else running
+this, not just Prudhvi. Auth is *not* in scope yet (deliberately kept
+single-user for now, see "What's NOT built").
 
 ---
 
@@ -40,10 +48,22 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 57 tests, isolated temp DB, safe anytime
-.venv/bin/python backend/qa_check.py       # needs a running backend; 22-check e2e smoke test
+.venv/bin/python -m pytest                # 66 tests, isolated temp DB, safe anytime
+.venv/bin/python backend/qa_check.py       # needs a running backend; 24-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
+
+**First run note:** semantic search needs `sentence-transformers` +
+CPU-only `torch`. If reinstalling deps from scratch, install torch from
+the CPU index *first* to avoid pulling ~2.5GB of unneeded CUDA packages:
+```bash
+uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install --python .venv/bin/python sentence-transformers
+```
+The embedding model (~80MB) downloads from HuggingFace on first use —
+the first chapter/journal save or search after a fresh install takes a
+few extra seconds while it downloads and loads; after that it's cached
+and fast.
 
 ---
 
@@ -77,6 +97,13 @@ cd frontend && npm run build               # tsc + vite build, catches type erro
   totally empty, "Tasks Due" sorted by real urgency (not creation order).
 - **Timeline** — chronological, grouped by month.
 - **Trash** — list/restore/permanently-delete, soft-delete everywhere.
+- **Semantic search** (AI layer, Phase 1) — meaning-based search over
+  note/journal content using a locally-run embedding model
+  (`all-MiniLM-L6-v2`, no API key, no per-search cost). Content gets
+  chunked (paragraph-based) and embedded on save; a Keyword/Semantic
+  toggle sits in the existing GlobalSearch dropdown. See `backend/ai/`
+  and §7 for the architecture reasoning and what's still deferred to
+  Phase 2 (multi-provider chat-completion features).
 - **Mobile responsive** down to ~375px — hamburger drawer nav, Notes/
   Projects use one-column drill-down with back buttons, Kanban scrolls
   horizontally instead of cramming 4 columns into a phone screen.
@@ -85,14 +112,18 @@ cd frontend && npm run build               # tsc + vite build, catches type erro
 
 ## What's NOT built (deliberately)
 
-- **AI layer** (vision doc V2 — suggestions, semantic search, study
-  coach). Deferred on purpose until there's an actual architecture
-  conversation about it (local LLM vs. API-based, cost, which model).
-  This is the natural "what's next" — see §7.
+- **AI layer Phase 2** (chat-completion features — suggestions, study
+  coach). Semantic search (Phase 1) is done; Phase 2 needs the
+  multi-provider abstraction (Anthropic + OpenAI + Gemini + OpenAI-
+  compatible registry for OpenRouter/NVIDIA NIM/Groq/etc., user-
+  selectable) that was scoped in the AI-layer conversation but not yet
+  built — see §7.
 - **Real auth.** Single hardcoded default user
   (`backend/dependencies.py::get_current_user`). Fine for personal local
   use, would need real work before ever being multi-user or exposed to
-  the internet.
+  the internet. Explicitly kept out of scope for now even though the
+  project is going open-source — flagged as a known limitation rather
+  than solved.
 
 ---
 
@@ -138,6 +169,34 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
    with a responsive card grid, and bumped font sizes.
 4. Moved the backend dev port from 8000 to 8420 — 8000 belongs to another
    project (Aether) on this machine.
+5. **AI layer, Phase 1 (semantic search).** Had the architecture
+   conversation before writing code, as planned: settled on embeddings
+   always local (cost/privacy — search runs on every query, can't route
+   that through a paid API and call it "near-zero cost"), paragraph-based
+   chunking, brute-force cosine similarity (fine at personal scale, no
+   vector index needed yet). Mid-conversation the user decided this is
+   going open-source rather than staying personal-only, which added a
+   requirement: many API providers, user-selectable, not hardcoded to
+   Anthropic. Key design insight: most of the requested providers
+   (OpenAI, OpenRouter, NVIDIA NIM, Groq) speak the same OpenAI-
+   compatible wire format, so that's one generic adapter + a registry of
+   presets, not N bespoke adapters — deferred to Phase 2 since it only
+   matters for chat-completion features, not search. Built Phase 1 only
+   this session: `Chunk` model (same polymorphic pattern as
+   `Attachment`), local embedding pipeline, reindex hooks on chapter/
+   journal create+update+restore, cleanup on trash's permanent delete,
+   `GET /api/search/semantic`, frontend Keyword/Semantic toggle. Verified
+   live via Playwright (searching "a function calling itself" correctly
+   ranked a Recursion chapter over an unrelated Baking Bread one).
+   Installed CPU-only torch explicitly — plain `pip install
+   sentence-transformers` pulls ~2.5GB of CUDA packages this machine
+   doesn't need. Mid-session the Desktop Commander connection dropped
+   entirely (not just a flaky single call — several consecutive tool
+   calls all timed out, including a trivial `get_config`); it recovered
+   after the user restarted it, but the background dev server processes
+   died with it and had to be restarted before continuing. 9 new tests,
+   suite at 66/66; `qa_check.py` extended to 24 checks. Committed and
+   pushed, CI green.
 
 **The pattern that got established, worth continuing:** every change —
 UI or backend — gets typechecked, run through pytest, and *actually
@@ -198,6 +257,14 @@ and Journal).
   actually succeeded server-side despite the client reporting failure —
   after a timeout, re-check state (`git status`, `git log`, `ps aux`)
   before blindly redoing something, to avoid double-applying it.
+  **This can escalate to a full drop**, not just one flaky call — several
+  consecutive calls in a row (even a trivial `get_config`) can all time
+  out identically, meaning the local MCP server itself went down, not
+  just a single request. When that happens, tell the user directly and
+  wait for them to restart it rather than continuing to retry
+  indefinitely. When it comes back, background dev server processes from
+  before the drop are likely dead too (confirm with `ps aux` before
+  assuming they're still running) and need restarting.
 - **Check for stale background processes before starting dev servers.**
   `nohup`'d `uvicorn`/`vite` processes from earlier sessions can survive
   a dropped connection and keep running, causing confusing "address
@@ -221,13 +288,22 @@ and Journal).
 
 ## 7. Natural next step
 
-The AI layer (vision doc V2) is the obvious "what's next" — it's the one
-deliberately-deferred piece, and there's now a populated graph to build
-it against. That needs an actual architecture conversation first though:
-local LLM vs. API-based (and if API-based, using what — the Anthropic API
-directly?), cost tradeoffs, which model, how it hooks into the existing
-FastAPI backend. Don't just start writing code for it — have that
-conversation with the user first.
+**AI layer Phase 2: the multi-provider abstraction.** Semantic search
+(Phase 1) is done and always uses local embeddings, so this is unrelated
+to that code. What's scoped but not built: an `AIProvider` interface
+(`embed()`/`chat()`, implement only what a feature needs) with
+`AnthropicProvider`, `GeminiProvider` (both native SDKs, different
+message formats), and one generic `OpenAICompatibleProvider`
+(parameterized by `base_url`) that covers OpenAI, OpenRouter, NVIDIA NIM,
+Groq, and similar via a small registry of presets — adding "some other
+popular provider" later should be a registry entry, not new code.
+Provider selection stored in a new single-row `ai_settings` table, keys
+via `.env` (never hardcoded — this matters more now that it's going
+open-source). Once that scaffold exists, the actual Phase 2 features
+(suggestions, study coach) can build on it. Don't just start writing code
+for this — the provider list/shape was scoped in conversation, but the
+concrete feature set (suggestions first? study coach first?) hasn't been
+discussed yet.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
