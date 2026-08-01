@@ -16,7 +16,8 @@ Vite frontend. Repo: https://github.com/Prudhvi-Yelisetti/stud-os
 **Current state: V1 is complete, tested, and genuinely usable daily.**
 Not a prototype — every feature below was built, then verified with real
 HTTP calls and/or a real browser (Playwright), not just "should work."
-**Semantic search (AI layer, Phase 1) is also done** — see §3 and §7.
+**Semantic search (AI layer, Phase 1) is done. AI layer Phase 2 (provider
+abstraction + task suggestions) is also done** — see §3 and §7.
 
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
@@ -48,10 +49,23 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 66 tests, isolated temp DB, safe anytime
-.venv/bin/python backend/qa_check.py       # needs a running backend; 24-check e2e smoke test
+.venv/bin/python -m pytest                # 77 tests, isolated temp DB, safe anytime
+.venv/bin/python backend/qa_check.py       # needs a running backend; 28-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
+**`qa_check.py` is NOT idempotent** — it creates a "QA Task" with
+`repeat_rule: daily` and never cleans it up, so running it twice against
+the same dev DB without resetting will make the "recurring task spawned"
+check fail (it'll count 2 instead of 1). Not a bug, just a smoke-test
+limitation — wipe `backend/stud_os.db` and re-run migrations if you need
+a clean run.
+
+**AI provider keys (Phase 2 features only — semantic search doesn't need
+any of this):** copy `.env.example` to `.env` and fill in whichever
+provider(s) you want. `main.py` calls `load_dotenv()` before anything
+reads the environment. Without a `.env`, `/api/ai/suggestions/tasks`
+correctly reports `configured: false` rather than erroring — that's
+expected, not broken.
 
 **First run note:** semantic search needs `sentence-transformers` +
 CPU-only `torch`. If reinstalling deps from scratch, install torch from
@@ -101,9 +115,18 @@ and fast.
   note/journal content using a locally-run embedding model
   (`all-MiniLM-L6-v2`, no API key, no per-search cost). Content gets
   chunked (paragraph-based) and embedded on save; a Keyword/Semantic
-  toggle sits in the existing GlobalSearch dropdown. See `backend/ai/`
-  and §7 for the architecture reasoning and what's still deferred to
-  Phase 2 (multi-provider chat-completion features).
+  toggle sits in the existing GlobalSearch dropdown. See `backend/ai/`.
+- **AI provider abstraction + task suggestions** (AI layer, Phase 2) —
+  `backend/ai/providers/`: an `AIProvider` interface with Anthropic and
+  Gemini native adapters plus one generic OpenAI-compatible adapter
+  (covers OpenAI/OpenRouter/Groq/NVIDIA NIM via a registry of presets —
+  adding another provider is a config entry, not new code). Settings
+  page lets you pick a provider per feature; keys live in `.env`
+  (`.env.example` documents all of them), never hardcoded. First feature
+  built on it: task suggestions ("what should I work on next") on the
+  dashboard. A separate "Related notes" panel in the chapter editor
+  reuses Phase 1's embeddings directly — no provider involved, always
+  free. See §7 for what's still not built on top of this layer.
 - **Mobile responsive** down to ~375px — hamburger drawer nav, Notes/
   Projects use one-column drill-down with back buttons, Kanban scrolls
   horizontally instead of cramming 4 columns into a phone screen.
@@ -112,12 +135,11 @@ and fast.
 
 ## What's NOT built (deliberately)
 
-- **AI layer Phase 2** (chat-completion features — suggestions, study
-  coach). Semantic search (Phase 1) is done; Phase 2 needs the
-  multi-provider abstraction (Anthropic + OpenAI + Gemini + OpenAI-
-  compatible registry for OpenRouter/NVIDIA NIM/Groq/etc., user-
-  selectable) that was scoped in the AI-layer conversation but not yet
-  built — see §7.
+- **AI layer Phase 3+** (the actual "study coach" feature, and any other
+  chat-completion feature beyond task suggestions). The provider
+  abstraction from Phase 2 is done and reusable — a new Phase 3 feature
+  just needs its own prompt-building + endpoint + UI, not new provider
+  plumbing. Nothing scoped yet for what Phase 3 actually is.
 - **Real auth.** Single hardcoded default user
   (`backend/dependencies.py::get_current_user`). Fine for personal local
   use, would need real work before ever being multi-user or exposed to
@@ -197,6 +219,44 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
    died with it and had to be restarted before continuing. 9 new tests,
    suite at 66/66; `qa_check.py` extended to 24 checks. Committed and
    pushed, CI green.
+6. **AI layer, Phase 2 (provider abstraction + task suggestions).**
+   Scoped in conversation first (feature: task suggestions; scope: build
+   all 6 providers now, not incrementally). Built the `AIProvider`
+   interface + registry + 3 adapters (Anthropic, Gemini, generic
+   OpenAI-compatible), `ai_settings` table, and endpoints, backend
+   fully tested before touching frontend (as agreed). Two real things
+   found and fixed along the way, not pre-planned: (1) `python-dotenv`
+   was in `requirements.txt` but nothing ever called `load_dotenv()` --
+   `.env` had silently never been loaded anywhere in the app, which
+   would have made the whole "keys go in .env" design not actually work.
+   Fixed in `main.py`, added `.env.example`. (2) Sorting tasks by
+   `Task.priority.desc()` for the suggestions prompt would have sorted
+   alphabetically ("urgent" > "medium" > "low" > "high" — high sorts
+   after low), not by actual severity; caught before it shipped and
+   simplified to sort by due date, leaving priority for the LLM to
+   reason over from the text instead of mis-sorting it procedurally
+   (this exact enum-sorting trap is already flagged as a comment in
+   `routers/tasks.py` from an earlier session — same bug shape twice).
+   Frontend: Settings page (provider picker per feature), "Related
+   notes" panel in the chapter editor (reuses Phase 1 embeddings
+   directly, no provider), "What's Next" dashboard widget. Verified live
+   with an actual (fake) key hitting the real Anthropic API to get a
+   genuine failure response, which caught a real bug: the dashboard
+   widget was mislabeling "the provider call actually failed" as "not
+   configured yet" -- fixed to distinguish `isError` from
+   `!data.configured`. Also discovered mid-session that the dev DB
+   (`stud_os.db`) had lost its notebooks/chapters at some point across
+   the connection drops (tasks/settings data in the same DB survived,
+   so not a full wipe) -- not investigated further since it's disposable
+   dev data, just re-seeded and moved on; noted here in case the pattern
+   recurs and becomes worth digging into. The Desktop Commander
+   connection dropped **twice more** this session (three total across
+   Phase 1 + Phase 2), same full-drop pattern each time, recovering
+   after the user restarted it. 11 new tests, suite at 77/77;
+   `qa_check.py` extended to 28 checks (discovered and noted that
+   `qa_check.py` isn't idempotent against a persistent dev DB -- see
+   §2). Committed and pushed, CI green (both jobs, including the fresh
+   `anthropic`/`google-genai`/`openai` installs in the CI environment).
 
 **The pattern that got established, worth continuing:** every change —
 UI or backend — gets typechecked, run through pytest, and *actually
@@ -264,7 +324,16 @@ and Journal).
   wait for them to restart it rather than continuing to retry
   indefinitely. When it comes back, background dev server processes from
   before the drop are likely dead too (confirm with `ps aux` before
-  assuming they're still running) and need restarting.
+  assuming they're still running) and need restarting. **This has now
+  happened 3 times across 2 sessions** (once during Phase 1, twice
+  during Phase 2), each time recovering cleanly after a restart with no
+  observed corruption to files already written -- but on one occasion
+  the dev SQLite DB (`stud_os.db`) lost some rows (notebooks/chapters
+  specifically; other tables in the same file were unaffected) across a
+  drop+restart cycle, cause not identified. Since the dev DB is
+  disposable this wasn't investigated further, but if it happens with
+  something less disposable, dig into it properly rather than just
+  re-seeding.
 - **Check for stale background processes before starting dev servers.**
   `nohup`'d `uvicorn`/`vite` processes from earlier sessions can survive
   a dropped connection and keep running, causing confusing "address
@@ -274,7 +343,10 @@ and Journal).
 - **Clean up after testing**: `rm -f backend/stud_os.db`,
   `rm -rf frontend/dist`, `rm -rf backend/uploads/*` before committing —
   none of these are tracked, but leaving test data around between
-  sessions is confusing.
+  sessions is confusing. If you added a real (or fake, for testing) key
+  to `.env` during a session, remove it too (`.env` is gitignored so it
+  won't leak into a commit, but a stale fake key sitting there is
+  confusing for the next session).
 - **`gh` CLI is authenticated** and has `workflow` scope now (needed a
   one-time interactive device-code login to get it — already done,
   shouldn't need to redo it). `gh run list` / `gh run view` work for
@@ -288,22 +360,13 @@ and Journal).
 
 ## 7. Natural next step
 
-**AI layer Phase 2: the multi-provider abstraction.** Semantic search
-(Phase 1) is done and always uses local embeddings, so this is unrelated
-to that code. What's scoped but not built: an `AIProvider` interface
-(`embed()`/`chat()`, implement only what a feature needs) with
-`AnthropicProvider`, `GeminiProvider` (both native SDKs, different
-message formats), and one generic `OpenAICompatibleProvider`
-(parameterized by `base_url`) that covers OpenAI, OpenRouter, NVIDIA NIM,
-Groq, and similar via a small registry of presets — adding "some other
-popular provider" later should be a registry entry, not new code.
-Provider selection stored in a new single-row `ai_settings` table, keys
-via `.env` (never hardcoded — this matters more now that it's going
-open-source). Once that scaffold exists, the actual Phase 2 features
-(suggestions, study coach) can build on it. Don't just start writing code
-for this — the provider list/shape was scoped in conversation, but the
-concrete feature set (suggestions first? study coach first?) hasn't been
-discussed yet.
+**AI layer Phase 3** — an actual second feature built on the Phase 2
+provider abstraction (study coach was the original idea, but nothing's
+been scoped for what it does concretely). The plumbing exists now
+(`AIProvider`, registry, settings UI) so this should be mostly prompt
+design + a new endpoint + UI, not new infrastructure. Have the "what
+should this actually do" conversation before writing code, same pattern
+as Phases 1 and 2.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
