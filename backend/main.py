@@ -1,8 +1,12 @@
+from dotenv import load_dotenv
+
+load_dotenv()  # must run before any AI provider reads its API key from the env
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import models  # noqa: F401 -- registers models on Base.metadata
-from backend.routers import notes, tasks, journal, gamification, projects, search, graph, attachments, trash
+from backend.routers import notes, tasks, journal, gamification, projects, search, graph, attachments, trash, ai
 
 app = FastAPI(title="Stud-OS API", version="0.2.0")
 
@@ -23,6 +27,7 @@ app.include_router(search.router)
 app.include_router(graph.router)
 app.include_router(attachments.router)
 app.include_router(trash.router)
+app.include_router(ai.router)
 
 
 @app.get("/api/health")

@@ -1,0 +1,36 @@
+import os
+
+from backend.ai.providers.base import AIProvider, ProviderError
+from backend.ai.providers.registry import ProviderPreset
+
+
+class GeminiProvider(AIProvider):
+    def __init__(self, preset: ProviderPreset):
+        self._preset = preset
+        self._model = os.environ.get(preset.model_env_key, preset.default_model)
+        api_key = os.environ.get(preset.env_key)
+        if not api_key:
+            raise ProviderError(f"{preset.env_key} is not set")
+        self._api_key = api_key
+
+    def chat(self, messages: list[dict], system: str | None = None) -> str:
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError as e:
+            raise ProviderError("google-genai package is not installed") from e
+
+        try:
+            client = genai.Client(api_key=self._api_key)
+            contents = [
+                types.Content(
+                    role="model" if m["role"] == "assistant" else "user",
+                    parts=[types.Part.from_text(text=m["content"])],
+                )
+                for m in messages
+            ]
+            config = types.GenerateContentConfig(system_instruction=system) if system else None
+            response = client.models.generate_content(model=self._model, contents=contents, config=config)
+            return response.text or ""
+        except Exception as e:
+            raise ProviderError(f"Gemini request failed: {e}") from e

@@ -65,6 +65,20 @@ check("semantic search finds conceptual match", any(r["id"]==sem_ch["id"] for r 
 sem_empty = requests.get(f"{B}/search/semantic", params={"q":""}).json()
 check("semantic search empty query returns empty list", sem_empty == [])
 
+# --- AI: related notes (local embeddings, no provider needed) ---
+bio_ch = requests.post(f"{B}/notebooks/{nb['id']}/chapters", json={"title":"Cellular Respiration","content":"Cells break down glucose to release energy, the reverse process of photosynthesis."}).json()
+related = requests.get(f"{B}/ai/suggestions/related/{sem_ch['id']}").json()
+related_ids = [r["id"] for r in related]
+check("related notes finds conceptual match", bio_ch["id"] in related_ids and sem_ch["id"] not in related_ids, related)
+
+# --- AI: providers + settings (no real API key expected in this run) ---
+providers = requests.get(f"{B}/ai/providers").json()
+check("ai providers lists presets", len(providers) >= 5, len(providers))
+default_settings = requests.get(f"{B}/ai/settings/suggestions").json()
+check("ai settings default is unconfigured", default_settings["provider_key"] is None, default_settings)
+task_sugg = requests.get(f"{B}/ai/suggestions/tasks").json()
+check("task suggestions report not-configured without a key", task_sugg["configured"] is False, task_sugg)
+
 # --- Graph ---
 graph = requests.get(f"{B}/graph").json()
 check("graph has nodes", len(graph["nodes"]) > 0, len(graph["nodes"]))

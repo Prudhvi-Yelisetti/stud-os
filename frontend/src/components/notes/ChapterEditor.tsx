@@ -6,6 +6,7 @@ import { WikiLinkText } from '../shared/WikiLinkText'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { detectActiveWikiLinkQuery } from '../../lib/wikiLinks'
 import { VersionHistoryPanel } from './VersionHistoryPanel'
+import { RelatedNotesPanel } from './RelatedNotesPanel'
 
 export function ChapterEditor({
   chapterId,
@@ -139,6 +140,7 @@ export function ChapterEditor({
         <p className="text-sm text-neutral-600">No backlinks yet.</p>
       )}
       <AttachmentPanel ownerType="chapter" ownerId={chapterId} />
+      <RelatedNotesPanel chapterId={chapterId} />
     </>
   )
 

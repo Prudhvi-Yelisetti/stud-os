@@ -28,3 +28,15 @@ class Chunk(Base, UUIDPKMixin, TimestampedMixin):
     # notes) -- a dedicated vector index is a drop-in upgrade later if a
     # workspace ever gets large enough to need one.
     embedding: Mapped[list[float]] = mapped_column(JSON, nullable=False)
+
+
+class AISettings(Base, UUIDPKMixin, TimestampedMixin):
+    """One row per feature (e.g. "suggestions"), recording which provider
+    that feature should use. A feature with no row -- or a row with
+    provider_key=None -- is a valid "not configured yet" state, not an
+    error. Providers themselves are defined in backend/ai/providers/."""
+    __tablename__ = "ai_settings"
+
+    feature: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    provider_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    model_override: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -15,6 +15,7 @@ const GraphPage = lazy(() => import('./pages/GraphPage').then((m) => ({ default:
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const TimelinePage = lazy(() => import('./pages/TimelinePage').then((m) => ({ default: m.TimelinePage })))
 const TrashPage = lazy(() => import('./pages/TrashPage').then((m) => ({ default: m.TrashPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 
 const queryClient = new QueryClient()
 
@@ -37,6 +38,7 @@ function App() {
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/trash" element={<TrashPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Route>
           </Routes>
         </Suspense>

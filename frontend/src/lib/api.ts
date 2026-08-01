@@ -137,6 +137,31 @@ export interface SemanticSearchResult {
   score: number
 }
 
+export interface AIProviderStatus {
+  key: string
+  label: string
+  configured: boolean
+}
+
+export interface AISettings {
+  feature: string
+  provider_key: string | null
+  model_override: string | null
+}
+
+export interface RelatedNote {
+  type: 'chapter' | 'journal'
+  id: string
+  title: string
+  snippet: string
+  score: number
+}
+
+export interface TaskSuggestions {
+  configured: boolean
+  suggestion: string | null
+}
+
 export interface GraphNode {
   id: string
   type: 'notebook' | 'chapter' | 'task' | 'project' | 'journal'

@@ -5,6 +5,7 @@ import { journalApi } from '../../lib/journal'
 import { notebooksApi } from '../../lib/notebooks'
 import { gamificationApi } from '../../lib/gamification'
 import { graphApi } from '../../lib/search'
+import { TaskSuggestionWidget } from './TaskSuggestionWidget'
 
 function Widget({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -116,6 +117,10 @@ export function Dashboard() {
               <p>{graph.edges.length} connections</p>
             </div>
           )}
+        </Widget>
+
+        <Widget title="What's Next">
+          <TaskSuggestionWidget />
         </Widget>
       </div>
     </div>
