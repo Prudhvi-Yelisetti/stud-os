@@ -7,6 +7,7 @@ import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { detectActiveWikiLinkQuery } from '../../lib/wikiLinks'
 import { VersionHistoryPanel } from './VersionHistoryPanel'
 import { RelatedNotesPanel } from './RelatedNotesPanel'
+import { QuizPanel } from './QuizPanel'
 
 export function ChapterEditor({
   chapterId,
@@ -141,6 +142,7 @@ export function ChapterEditor({
       )}
       <AttachmentPanel ownerType="chapter" ownerId={chapterId} />
       <RelatedNotesPanel chapterId={chapterId} />
+      <QuizPanel chapterId={chapterId} />
     </>
   )
 

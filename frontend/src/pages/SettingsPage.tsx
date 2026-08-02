@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { aiApi } from '../lib/ai'
 
-const FEATURES = [{ key: 'suggestions', label: 'Task suggestions', description: 'Suggests what to work on next, based on your open tasks.' }]
+const FEATURES = [
+  { key: 'suggestions', label: 'Task suggestions', description: 'Suggests what to work on next, based on your open tasks.' },
+  { key: 'study', label: 'Study coach', description: "Generates a quiz from a chapter's content to help you study it." },
+]
 
 export function SettingsPage() {
   return (

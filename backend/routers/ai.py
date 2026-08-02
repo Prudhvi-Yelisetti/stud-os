@@ -16,10 +16,11 @@ from backend.database.session import get_db
 from backend.database.models.user import User
 from backend.database.models.ai import AISettings, Chunk
 from backend.database.models.tasks import Task, TaskStatus
+from backend.database.models.notes import Chapter, Notebook
 from backend.dependencies import get_current_user
-from backend.ai.indexing import semantic_search
 from backend.ai.providers.factory import list_providers_with_status, get_provider, is_configured
 from backend.ai.providers.base import ProviderError
+from backend.ai.json_reply import parse_json_reply
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -52,6 +53,18 @@ class RelatedNoteOut(BaseModel):
 class TaskSuggestionsOut(BaseModel):
     configured: bool
     suggestion: str | None = None
+
+
+class QuizQuestion(BaseModel):
+    question: str
+    choices: list[str]
+    correct_index: int
+    explanation: str
+
+
+class QuizOut(BaseModel):
+    configured: bool
+    questions: list[QuizQuestion] = []
 
 
 @router.get("/providers", response_model=list[ProviderStatus])
@@ -174,3 +187,58 @@ def task_suggestions(db: Session = Depends(get_db), user: User = Depends(get_cur
         raise HTTPException(status_code=502, detail=str(e))
 
     return TaskSuggestionsOut(configured=True, suggestion=reply)
+
+
+@router.post("/study/quiz/{chapter_id}", response_model=QuizOut)
+def generate_quiz(
+    chapter_id: str, count: int = 5, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """Generates a multiple-choice quiz from a chapter's content via the
+    'study' feature's configured provider. The correct answer and
+    explanation are included in the response -- this is a single-user
+    local app with no adversarial client, so there's no reason to pay
+    for a second round trip just to grade an answer the frontend can
+    check itself."""
+    settings_row = db.query(AISettings).filter(AISettings.feature == "study").first()
+    if settings_row is None or not settings_row.provider_key:
+        return QuizOut(configured=False)
+
+    chapter = (
+        db.query(Chapter)
+        .join(Notebook, Notebook.id == Chapter.notebook_id)
+        .filter(Chapter.id == chapter_id, Notebook.user_id == user.id)
+        .first()
+    )
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    if not chapter.content.strip():
+        raise HTTPException(status_code=400, detail="This chapter has no content to quiz on yet")
+
+    count = max(1, min(count, 10))
+    prompt = (
+        f"Study material, titled \"{chapter.title}\":\n\n{chapter.content}\n\n"
+        f"Write exactly {count} multiple-choice questions testing understanding of this "
+        "material. Respond with ONLY valid JSON, no markdown fences, no commentary, in "
+        'exactly this shape: {"questions": [{"question": str, "choices": [4 strings], '
+        '"correct_index": int (0-3), "explanation": str}]}'
+    )
+
+    try:
+        provider = get_provider(settings_row.provider_key)
+        reply = provider.chat(
+            messages=[{"role": "user", "content": prompt}],
+            system="You are a study-quiz generator. You only ever respond with raw JSON, never prose.",
+        )
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    try:
+        parsed = parse_json_reply(reply)
+        questions = [QuizQuestion(**q) for q in parsed["questions"]]
+        for q in questions:
+            if not (0 <= q.correct_index < len(q.choices)):
+                raise ValueError("correct_index out of range")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not generate a valid quiz: {e}")
+
+    return QuizOut(configured=True, questions=questions)

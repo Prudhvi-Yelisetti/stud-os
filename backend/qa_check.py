@@ -78,6 +78,8 @@ default_settings = requests.get(f"{B}/ai/settings/suggestions").json()
 check("ai settings default is unconfigured", default_settings["provider_key"] is None, default_settings)
 task_sugg = requests.get(f"{B}/ai/suggestions/tasks").json()
 check("task suggestions report not-configured without a key", task_sugg["configured"] is False, task_sugg)
+quiz = requests.post(f"{B}/ai/study/quiz/{sem_ch['id']}").json()
+check("quiz reports not-configured without a key", quiz == {"configured": False, "questions": []}, quiz)
 
 # --- Graph ---
 graph = requests.get(f"{B}/graph").json()

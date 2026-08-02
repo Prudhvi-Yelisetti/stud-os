@@ -162,6 +162,18 @@ export interface TaskSuggestions {
   suggestion: string | null
 }
 
+export interface QuizQuestion {
+  question: string
+  choices: string[]
+  correct_index: number
+  explanation: string
+}
+
+export interface Quiz {
+  configured: boolean
+  questions: QuizQuestion[]
+}
+
 export interface GraphNode {
   id: string
   type: 'notebook' | 'chapter' | 'task' | 'project' | 'journal'
