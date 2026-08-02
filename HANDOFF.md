@@ -16,8 +16,9 @@ Vite frontend. Repo: https://github.com/Prudhvi-Yelisetti/stud-os
 **Current state: V1 is complete, tested, and genuinely usable daily.**
 Not a prototype — every feature below was built, then verified with real
 HTTP calls and/or a real browser (Playwright), not just "should work."
-**Semantic search (AI layer, Phase 1) is done. AI layer Phase 2 (provider
-abstraction + task suggestions) is also done** — see §3 and §7.
+**AI layer is now fully built through Phase 3**: semantic search (Phase
+1), provider abstraction + task suggestions (Phase 2), and study-coach
+quiz generation (Phase 3) — see §3 and §7.
 
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
@@ -49,8 +50,8 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 77 tests, isolated temp DB, safe anytime
-.venv/bin/python backend/qa_check.py       # needs a running backend; 28-check e2e smoke test
+.venv/bin/python -m pytest                # 89 tests, isolated temp DB, safe anytime
+.venv/bin/python backend/qa_check.py       # needs a running backend; 29-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
 **`qa_check.py` is NOT idempotent** — it creates a "QA Task" with
@@ -60,8 +61,8 @@ check fail (it'll count 2 instead of 1). Not a bug, just a smoke-test
 limitation — wipe `backend/stud_os.db` and re-run migrations if you need
 a clean run.
 
-**AI provider keys (Phase 2 features only — semantic search doesn't need
-any of this):** copy `.env.example` to `.env` and fill in whichever
+**AI provider keys (Phase 2/3 features only — semantic search doesn't
+need any of this):** copy `.env.example` to `.env` and fill in whichever
 provider(s) you want. `main.py` calls `load_dotenv()` before anything
 reads the environment. Without a `.env`, `/api/ai/suggestions/tasks`
 correctly reports `configured: false` rather than erroring — that's
@@ -126,7 +127,17 @@ and fast.
   built on it: task suggestions ("what should I work on next") on the
   dashboard. A separate "Related notes" panel in the chapter editor
   reuses Phase 1's embeddings directly — no provider involved, always
-  free. See §7 for what's still not built on top of this layer.
+  free.
+- **Study coach quiz generation** (AI layer, Phase 3) — `POST
+  /api/ai/study/quiz/{chapter_id}` generates a multiple-choice quiz from
+  a chapter's content via the "study" feature's configured provider
+  (same per-feature settings pattern as Phase 2, no new plumbing). The
+  answer + explanation come back in the same response rather than a
+  second round-trip to grade — reasonable for a single-user local app.
+  `backend/ai/json_reply.py` tolerates the markdown-fence-wrapping
+  models often do despite being told not to. Frontend: a `QuizPanel` in
+  the chapter editor, one question at a time with immediate feedback and
+  a running score. See §7 for what's still not built beyond this.
 - **Mobile responsive** down to ~375px — hamburger drawer nav, Notes/
   Projects use one-column drill-down with back buttons, Kanban scrolls
   horizontally instead of cramming 4 columns into a phone screen.
@@ -135,11 +146,12 @@ and fast.
 
 ## What's NOT built (deliberately)
 
-- **AI layer Phase 3+** (the actual "study coach" feature, and any other
-  chat-completion feature beyond task suggestions). The provider
-  abstraction from Phase 2 is done and reusable — a new Phase 3 feature
-  just needs its own prompt-building + endpoint + UI, not new provider
-  plumbing. Nothing scoped yet for what Phase 3 actually is.
+- **AI layer Phase 4+.** Semantic search, task suggestions, and study
+  quizzes are all done. The provider abstraction is reusable — a new
+  Phase 4 feature just needs its own prompt-building + endpoint + UI.
+  Nothing scoped for what that would even be; the original vision doc's
+  AI ideas (suggestions, semantic search, study coach) are now all built,
+  so this is genuinely open-ended rather than "the next obvious thing."
 - **Real auth.** Single hardcoded default user
   (`backend/dependencies.py::get_current_user`). Fine for personal local
   use, would need real work before ever being multi-user or exposed to
@@ -257,6 +269,39 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
    `qa_check.py` isn't idempotent against a persistent dev DB -- see
    §2). Committed and pushed, CI green (both jobs, including the fresh
    `anthropic`/`google-genai`/`openai` installs in the CI environment).
+7. **AI layer, Phase 3 (study coach quiz generation).** The user handed
+   this one over fully ("plan yourself, do whatever works well") rather
+   than co-scoping it -- picked the quiz feature since it was the
+   original "study coach" idea from the vision doc and reuses Phase 2's
+   provider abstraction directly (just a new `"study"` feature key, no
+   schema change, no new provider plumbing). Designed the quiz to return
+   the correct answer + explanation in the same response rather than a
+   second round-trip to grade the user's pick -- fine for a single-user
+   local app with no adversarial client. Built `backend/ai/json_reply.py`
+   to tolerate the markdown-fence-wrapping models do to JSON despite
+   being told not to. For live UI verification without a real API key,
+   used a throwaway script (outside the repo, in `~/`, deleted after use)
+   that monkeypatched `AnthropicProvider.chat` to return a canned quiz
+   and ran the real `uvicorn` app against it -- let the actual frontend
+   be clicked through end-to-end (question rendered, wrong-answer
+   feedback + explanation shown, score tracked across questions) without
+   touching any committed code or paying for a real API call. The
+   Desktop Commander connection dropped once more this session (4th time
+   total) with the same full-drop-then-clean-recovery pattern. Also hit
+   (and fixed cleanly) the now-familiar "dev DB doesn't exist, run
+   migrations first" issue from starting fresh after a previous
+   session's cleanup -- see §2's note on `qa_check.py`/DB reset for the
+   pattern. 12 new tests, suite at 89/89; `qa_check.py` extended to 29
+   checks. Committed, pushed, CI green.
+
+**A pattern worth naming from this session specifically:** when no real
+API key is available for live-verifying a provider-backed feature,
+monkeypatching the provider's `chat()` method in a throwaway,
+never-committed script (run from outside the repo) and pointing the real
+frontend at it is a good way to verify actual UI behavior end-to-end
+without either skipping live verification or leaving test scaffolding in
+the codebase. Delete the script after use; never let anything like it
+get committed.
 
 **The pattern that got established, worth continuing:** every change —
 UI or backend — gets typechecked, run through pytest, and *actually
@@ -325,15 +370,15 @@ and Journal).
   indefinitely. When it comes back, background dev server processes from
   before the drop are likely dead too (confirm with `ps aux` before
   assuming they're still running) and need restarting. **This has now
-  happened 3 times across 2 sessions** (once during Phase 1, twice
-  during Phase 2), each time recovering cleanly after a restart with no
-  observed corruption to files already written -- but on one occasion
-  the dev SQLite DB (`stud_os.db`) lost some rows (notebooks/chapters
-  specifically; other tables in the same file were unaffected) across a
-  drop+restart cycle, cause not identified. Since the dev DB is
-  disposable this wasn't investigated further, but if it happens with
-  something less disposable, dig into it properly rather than just
-  re-seeding.
+  happened 4 times across 3 sessions** (once during Phase 1, twice
+  during Phase 2, once during Phase 3), each time recovering cleanly
+  after a restart with no observed corruption to files already written
+  -- but on one occasion the dev SQLite DB (`stud_os.db`) lost some rows
+  (notebooks/chapters specifically; other tables in the same file were
+  unaffected) across a drop+restart cycle, cause not identified. Since
+  the dev DB is disposable this wasn't investigated further, but if it
+  happens with something less disposable, dig into it properly rather
+  than just re-seeding.
 - **Check for stale background processes before starting dev servers.**
   `nohup`'d `uvicorn`/`vite` processes from earlier sessions can survive
   a dropped connection and keep running, causing confusing "address
@@ -360,13 +405,12 @@ and Journal).
 
 ## 7. Natural next step
 
-**AI layer Phase 3** — an actual second feature built on the Phase 2
-provider abstraction (study coach was the original idea, but nothing's
-been scoped for what it does concretely). The plumbing exists now
-(`AIProvider`, registry, settings UI) so this should be mostly prompt
-design + a new endpoint + UI, not new infrastructure. Have the "what
-should this actually do" conversation before writing code, same pattern
-as Phases 1 and 2.
+The AI layer is now done through everything the original vision doc
+named (semantic search, task suggestions, study coach quizzes). There
+isn't an obvious "next AI feature" queued up anymore — this is genuinely
+open territory. If the user wants more AI work, that means a fresh
+"what should this actually do" conversation, not just continuing down a
+pre-set list.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
