@@ -21,6 +21,7 @@ from backend.dependencies import get_current_user
 from backend.ai.providers.factory import list_providers_with_status, get_provider, is_configured
 from backend.ai.providers.base import ProviderError
 from backend.ai.json_reply import parse_json_reply
+from backend.ai.embeddings import embed_text, cosine_similarity
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -65,6 +66,32 @@ class QuizQuestion(BaseModel):
 class QuizOut(BaseModel):
     configured: bool
     questions: list[QuizQuestion] = []
+
+
+class AskMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class AskIn(BaseModel):
+    messages: list[AskMessage]
+    # Each entry is a notebook id, or the literal string "journal" (journal
+    # entries aren't inside a notebook, so they need their own sentinel).
+    # Empty list means "search everything" -- there's no forced default
+    # selection the user has to first opt out of.
+    sources: list[str] = []
+
+
+class AskSourceOut(BaseModel):
+    type: str
+    id: str
+    title: str
+
+
+class AskOut(BaseModel):
+    configured: bool
+    answer: str | None = None
+    sources: list[AskSourceOut] = []
 
 
 @router.get("/providers", response_model=list[ProviderStatus])
@@ -121,7 +148,6 @@ def related_notes(
     avg = [sum(c.embedding[i] for c in source_chunks) / len(source_chunks) for i in range(dim)]
 
     all_chunks = db.query(Chunk).filter(Chunk.user_id == user.id).all()
-    from backend.ai.embeddings import cosine_similarity
 
     seen_parents: set[str] = {chapter_id}
     scored: list[tuple[Chunk, float]] = []
@@ -242,3 +268,78 @@ def generate_quiz(
         raise HTTPException(status_code=502, detail=f"Could not generate a valid quiz: {e}")
 
     return QuizOut(configured=True, questions=questions)
+
+
+@router.post("/ask", response_model=AskOut)
+def ask_notes(payload: AskIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Retrieval-augmented chat over the user's own notes and journal.
+    Retrieval always uses local embeddings (Phase 1, free); generation
+    goes through the 'ask' feature's configured provider. Stateless --
+    the frontend holds and resends the full message history each turn,
+    same as any ordinary chat client; nothing is persisted server-side."""
+    settings_row = db.query(AISettings).filter(AISettings.feature == "ask").first()
+    if settings_row is None or not settings_row.provider_key:
+        return AskOut(configured=False)
+
+    if not payload.messages or payload.messages[-1].role != "user":
+        raise HTTPException(status_code=400, detail="messages must end with a user message")
+
+    question = payload.messages[-1].content
+    source_set = set(payload.sources)  # empty set = no filter = everything
+
+    chunks = db.query(Chunk).filter(Chunk.user_id == user.id).all()
+    if source_set:
+        # Chunk doesn't store notebook_id directly (it's polymorphic, see
+        # database/models/ai.py), so resolve chapter->notebook once here
+        # rather than per-chunk.
+        chapter_notebook = {
+            c.id: c.notebook_id
+            for c in db.query(Chapter).join(Notebook, Notebook.id == Chapter.notebook_id)
+            .filter(Notebook.user_id == user.id).all()
+        }
+        allowed_notebooks = source_set - {"journal"}
+        include_journal = "journal" in source_set
+
+        def in_scope(chunk: Chunk) -> bool:
+            if chunk.parent_type == "journal":
+                return include_journal
+            if chunk.parent_type == "chapter":
+                return chapter_notebook.get(chunk.parent_id) in allowed_notebooks
+            return False
+
+        chunks = [c for c in chunks if in_scope(c)]
+
+    answer_sources: list[AskSourceOut] = []
+    context = ""
+    if chunks:
+        query_vector = embed_text(question)
+        scored = sorted(chunks, key=lambda c: cosine_similarity(query_vector, c.embedding), reverse=True)
+        top = scored[:6]
+
+        seen_parents: set[str] = set()
+        context_parts = []
+        for chunk in top:
+            context_parts.append(f'From "{chunk.parent_title}":\n{chunk.content}')
+            if chunk.parent_id not in seen_parents:
+                seen_parents.add(chunk.parent_id)
+                answer_sources.append(AskSourceOut(type=chunk.parent_type, id=chunk.parent_id, title=chunk.parent_title))
+        context = "\n\n".join(context_parts)
+
+    system = (
+        "You answer questions using ONLY the notes provided below as context. "
+        "If the answer isn't in them, say so plainly rather than guessing. "
+        "Be concise.\n\n" + (context if context else "(No matching notes were found for this question.)")
+    )
+
+    # Cap history sent to the provider -- a long-running chat shouldn't grow
+    # the token cost of every single turn without bound. The frontend still
+    # displays the full transcript; this only trims what gets sent upstream.
+    history = [m.model_dump() for m in payload.messages[-8:]]
+
+    try:
+        provider = get_provider(settings_row.provider_key)
+        reply = provider.chat(messages=history, system=system)
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return AskOut(configured=True, answer=reply, sources=answer_sources)

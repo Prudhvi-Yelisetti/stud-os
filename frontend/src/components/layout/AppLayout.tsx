@@ -12,6 +12,7 @@ const navItems = [
   { to: '/graph', label: 'Graph' },
   { to: '/timeline', label: 'Timeline' },
   { to: '/trash', label: 'Trash' },
+  { to: '/ask', label: 'Ask' },
   { to: '/settings', label: 'Settings' },
 ]
 

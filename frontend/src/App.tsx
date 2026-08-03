@@ -16,6 +16,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ 
 const TimelinePage = lazy(() => import('./pages/TimelinePage').then((m) => ({ default: m.TimelinePage })))
 const TrashPage = lazy(() => import('./pages/TrashPage').then((m) => ({ default: m.TrashPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const AskPage = lazy(() => import('./pages/AskPage').then((m) => ({ default: m.AskPage })))
 
 const queryClient = new QueryClient()
 
@@ -39,6 +40,7 @@ function App() {
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/trash" element={<TrashPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/ask" element={<AskPage />} />
             </Route>
           </Routes>
         </Suspense>

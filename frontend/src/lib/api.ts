@@ -174,6 +174,23 @@ export interface Quiz {
   questions: QuizQuestion[]
 }
 
+export interface AskMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AskSource {
+  type: 'chapter' | 'journal'
+  id: string
+  title: string
+}
+
+export interface AskResponse {
+  configured: boolean
+  answer: string | null
+  sources: AskSource[]
+}
+
 export interface GraphNode {
   id: string
   type: 'notebook' | 'chapter' | 'task' | 'project' | 'journal'

@@ -1,4 +1,4 @@
-import { api, type AIProviderStatus, type AISettings, type RelatedNote, type TaskSuggestions, type Quiz } from './api'
+import { api, type AIProviderStatus, type AISettings, type RelatedNote, type TaskSuggestions, type Quiz, type AskMessage, type AskResponse } from './api'
 
 export const aiApi = {
   providers: () => api.get<AIProviderStatus[]>('/ai/providers').then((r) => r.data),
@@ -10,4 +10,6 @@ export const aiApi = {
   taskSuggestions: () => api.get<TaskSuggestions>('/ai/suggestions/tasks').then((r) => r.data),
   generateQuiz: (chapterId: string) =>
     api.post<Quiz>(`/ai/study/quiz/${chapterId}`).then((r) => r.data),
+  ask: (messages: AskMessage[], sources: string[]) =>
+    api.post<AskResponse>('/ai/ask', { messages, sources }).then((r) => r.data),
 }

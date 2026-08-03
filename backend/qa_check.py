@@ -80,6 +80,8 @@ task_sugg = requests.get(f"{B}/ai/suggestions/tasks").json()
 check("task suggestions report not-configured without a key", task_sugg["configured"] is False, task_sugg)
 quiz = requests.post(f"{B}/ai/study/quiz/{sem_ch['id']}").json()
 check("quiz reports not-configured without a key", quiz == {"configured": False, "questions": []}, quiz)
+ask = requests.post(f"{B}/ai/ask", json={"messages":[{"role":"user","content":"test"}]}).json()
+check("ask reports not-configured without a key", ask == {"configured": False, "answer": None, "sources": []}, ask)
 
 # --- Graph ---
 graph = requests.get(f"{B}/graph").json()

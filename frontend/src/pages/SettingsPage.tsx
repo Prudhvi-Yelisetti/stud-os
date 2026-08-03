@@ -5,6 +5,7 @@ import { aiApi } from '../lib/ai'
 const FEATURES = [
   { key: 'suggestions', label: 'Task suggestions', description: 'Suggests what to work on next, based on your open tasks.' },
   { key: 'study', label: 'Study coach', description: "Generates a quiz from a chapter's content to help you study it." },
+  { key: 'ask', label: 'Ask your notes', description: 'Chat that answers using your notes and journal as context.' },
 ]
 
 export function SettingsPage() {
