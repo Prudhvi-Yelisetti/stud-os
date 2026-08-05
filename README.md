@@ -24,13 +24,22 @@ All of V1 from the vision doc is built, tested, and in daily-usable shape:
 - Mobile-responsive (hamburger drawer, drill-down navigation, horizontal
   Kanban scroll) down to ~375px
 - CI on GitHub Actions (pytest + frontend build, runs on every push)
+- **AI layer — fully built**, four phases, all reusing the same provider
+  abstraction:
+  - **Semantic search** — meaning-based search over notes/journal,
+    always local (`all-MiniLM-L6-v2`), no API key or cost
+  - **Task suggestions** — "what should I work on next," on the dashboard
+  - **Study coach** — generates a quiz from any chapter's content
+  - **Ask your notes** — multi-turn chat that answers using your own
+    notes/journal as context, with sources shown and clickable
+  - Bring your own API key for the chat-completion features (semantic
+    search never needs one): Anthropic, Gemini, OpenAI, OpenRouter, Groq,
+    or NVIDIA NIM — pick per-feature in Settings. See "AI features" below.
 
-**Not built, deliberately deferred:** the V2 AI layer (suggestions,
-semantic search, study coach) — waiting on an actual architecture
-conversation (local LLM vs. API-based, cost, which model) rather than
-being built ad hoc. Real auth is also not built — it's a single
-hardcoded local user, fine for personal use, would need work before
-ever being multi-user or internet-facing.
+**Not built, deliberately deferred:** real auth — it's a single hardcoded
+local user, fine for personal use, would need work before ever being
+multi-user or internet-facing. The project is going open-source, so this
+is a known, flagged limitation rather than an oversight.
 
 See `HANDOFF.md` for a full session-by-session history and current
 state, and `REBUILD_PLAN.md` for the original architecture/data-model
@@ -75,3 +84,23 @@ exercises the full feature surface in one pass. Start the backend first:
 ```bash
 .venv/bin/python backend/qa_check.py
 ```
+
+## AI features
+
+Semantic search works out of the box — it runs a small local embedding
+model (`all-MiniLM-L6-v2`, downloads once from HuggingFace on first use),
+no API key needed.
+
+The rest (task suggestions, study coach, ask-your-notes) need an API key
+from at least one provider:
+
+```bash
+cp .env.example .env
+# fill in whichever provider(s) you want, e.g. ANTHROPIC_API_KEY=...
+```
+
+Then pick a provider per feature in **Settings** in the app — each
+feature can use a different provider, or none at all ("not configured"
+is a normal, expected state, not an error). Supported: Anthropic, Gemini,
+OpenAI, OpenRouter, Groq, NVIDIA NIM. See `.env.example` for the exact
+env var names and optional model overrides.
