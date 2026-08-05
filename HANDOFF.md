@@ -16,9 +16,10 @@ Vite frontend. Repo: https://github.com/Prudhvi-Yelisetti/stud-os
 **Current state: V1 is complete, tested, and genuinely usable daily.**
 Not a prototype — every feature below was built, then verified with real
 HTTP calls and/or a real browser (Playwright), not just "should work."
-**AI layer is now fully built through Phase 3**: semantic search (Phase
-1), provider abstraction + task suggestions (Phase 2), and study-coach
-quiz generation (Phase 3) — see §3 and §7.
+**AI layer is now fully built through Phase 4**: semantic search (Phase
+1), provider abstraction + task suggestions (Phase 2), study-coach quiz
+generation (Phase 3), and ask-your-notes RAG chat (Phase 4) — see §3
+and §7.
 
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
@@ -50,8 +51,8 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 89 tests, isolated temp DB, safe anytime
-.venv/bin/python backend/qa_check.py       # needs a running backend; 29-check e2e smoke test
+.venv/bin/python -m pytest                # 97 tests, isolated temp DB, safe anytime
+.venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
 **`qa_check.py` is NOT idempotent** — it creates a "QA Task" with
@@ -61,7 +62,7 @@ check fail (it'll count 2 instead of 1). Not a bug, just a smoke-test
 limitation — wipe `backend/stud_os.db` and re-run migrations if you need
 a clean run.
 
-**AI provider keys (Phase 2/3 features only — semantic search doesn't
+**AI provider keys (Phase 2/3/4 features only — semantic search doesn't
 need any of this):** copy `.env.example` to `.env` and fill in whichever
 provider(s) you want. `main.py` calls `load_dotenv()` before anything
 reads the environment. Without a `.env`, `/api/ai/suggestions/tasks`
@@ -137,7 +138,19 @@ and fast.
   `backend/ai/json_reply.py` tolerates the markdown-fence-wrapping
   models often do despite being told not to. Frontend: a `QuizPanel` in
   the chapter editor, one question at a time with immediate feedback and
-  a running score. See §7 for what's still not built beyond this.
+  a running score.
+- **Ask-your-notes RAG chat** (AI layer, Phase 4) — `POST /api/ai/ask`:
+  multi-turn chat that answers using the user's own notes/journal as
+  context. Composes Phase 1 (local embeddings for retrieval) with
+  Phase 2 (provider abstraction for generation), no new infrastructure —
+  just a new `"ask"` feature key. Retrieval is scoped by a `sources`
+  list (notebook ids, plus the literal `"journal"` sentinel since
+  journal entries aren't inside a notebook; empty = search everything).
+  Stateless server-side — the frontend holds and resends the full
+  transcript each turn. Returns the distinct sources actually used per
+  turn for citation display. Frontend: new `/ask` page with a source
+  picker (notebook + Journal pills), chat UI, and clickable source tags
+  under each answer that navigate to the note. See §7 for what's next.
 - **Mobile responsive** down to ~375px — hamburger drawer nav, Notes/
   Projects use one-column drill-down with back buttons, Kanban scrolls
   horizontally instead of cramming 4 columns into a phone screen.
@@ -146,12 +159,13 @@ and fast.
 
 ## What's NOT built (deliberately)
 
-- **AI layer Phase 4+.** Semantic search, task suggestions, and study
-  quizzes are all done. The provider abstraction is reusable — a new
-  Phase 4 feature just needs its own prompt-building + endpoint + UI.
-  Nothing scoped for what that would even be; the original vision doc's
-  AI ideas (suggestions, semantic search, study coach) are now all built,
-  so this is genuinely open-ended rather than "the next obvious thing."
+- **AI layer Phase 5+.** Semantic search, task suggestions, study
+  quizzes, and ask-your-notes chat are all done — every idea from the
+  original vision doc plus one the user added (RAG chat) is built now.
+  The provider abstraction is reusable — a new Phase 5 feature just
+  needs its own prompt-building + endpoint + UI. Nothing scoped for what
+  that would even be; this is genuinely open territory, not a
+  pre-set list to keep working through.
 - **Real auth.** Single hardcoded default user
   (`backend/dependencies.py::get_current_user`). Fine for personal local
   use, would need real work before ever being multi-user or exposed to
@@ -293,8 +307,45 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
    session's cleanup -- see §2's note on `qa_check.py`/DB reset for the
    pattern. 12 new tests, suite at 89/89; `qa_check.py` extended to 29
    checks. Committed, pushed, CI green.
+8. **AI layer, Phase 4 (ask-your-notes RAG chat).** User picked this
+   direction after being offered a few options (RAG chat, journal
+   insights, auto-tagging, spaced repetition), then co-scoped the
+   specifics: multi-turn (not single-shot), sources shown, and
+   user-selectable retrieval scope. Composed cleanly from what already
+   existed -- Phase 1's embeddings for retrieval, Phase 2's provider
+   abstraction for generation, no new infrastructure beyond one endpoint
+   and a new `"ask"` feature key. Key design calls: sources is a flat
+   `list[str]` where each entry is a notebook id or the literal string
+   `"journal"` (journal entries aren't inside a notebook, so they needed
+   their own sentinel rather than forcing an awkward parallel structure);
+   empty list means "search everything" rather than some notebook being
+   silently default-selected; the backend stays fully stateless and the
+   frontend resends the whole transcript each turn, same as any ordinary
+   chat client, so there's no new "conversations" table; history sent
+   to the provider is capped to the last 8 messages so a long-running
+   chat's token cost doesn't grow unbounded (the frontend still shows
+   the full transcript). One test's own assumption was wrong rather than
+   the code being wrong -- expected the baking-bread chapter to be
+   excluded from an unscoped "top 6" retrieval, but the test corpus only
+   had 3 chunks total, so everything trivially made top-6; fixed the
+   test to check ranking order instead of exclusion. Live-verified the
+   same way as Phase 3 (throwaway monkeypatch script outside the repo,
+   deleted after use, no real API key needed) -- asked a real question
+   through the real UI, got an answer with both a chapter and a journal
+   source shown as clickable tags, clicked one and confirmed it
+   navigated correctly, then re-verified that selecting only the Journal
+   source correctly excluded the CS chapter from the next answer. The
+   Desktop Commander connection dropped **twice** this session (5th and
+   6th times total) -- the first of the two was a new failure mode: not
+   just timeouts, but `tool_search` stopped finding Desktop Commander's
+   tools at all and calling one by name failed immediately rather than
+   timing out, meaning the MCP server had fully deregistered rather than
+   just being slow to respond. Both times recovered cleanly after a
+   restart with no work lost (everything from before each drop was
+   already written and verified). 8 new tests, suite at 97/97;
+   `qa_check.py` extended to 30 checks. Committed, pushed, CI green.
 
-**A pattern worth naming from this session specifically:** when no real
+**A pattern worth naming, now used twice (Phases 3 and 4):** when no real
 API key is available for live-verifying a provider-backed feature,
 monkeypatching the provider's `chat()` method in a throwaway,
 never-committed script (run from outside the repo) and pointing the real
@@ -330,7 +381,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (57 tests), isolated temp-DB fixture
+  tests/                 pytest suite (97 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -370,15 +421,20 @@ and Journal).
   indefinitely. When it comes back, background dev server processes from
   before the drop are likely dead too (confirm with `ps aux` before
   assuming they're still running) and need restarting. **This has now
-  happened 4 times across 3 sessions** (once during Phase 1, twice
-  during Phase 2, once during Phase 3), each time recovering cleanly
-  after a restart with no observed corruption to files already written
-  -- but on one occasion the dev SQLite DB (`stud_os.db`) lost some rows
-  (notebooks/chapters specifically; other tables in the same file were
-  unaffected) across a drop+restart cycle, cause not identified. Since
-  the dev DB is disposable this wasn't investigated further, but if it
-  happens with something less disposable, dig into it properly rather
-  than just re-seeding.
+  happened 6 times across 4 sessions** (once during Phase 1, twice
+  during Phase 2, once during Phase 3, twice during Phase 4), each time
+  recovering cleanly after a restart with no observed corruption to
+  files already written -- but on one occasion the dev SQLite DB
+  (`stud_os.db`) lost some rows (notebooks/chapters specifically; other
+  tables in the same file were unaffected) across a drop+restart cycle,
+  cause not identified. Since the dev DB is disposable this wasn't
+  investigated further, but if it happens with something less
+  disposable, dig into it properly rather than just re-seeding. **One
+  occurrence was a different failure mode**: not a timeout, but
+  `tool_search` stopped finding Desktop Commander's tools entirely and
+  calling one directly by name failed immediately -- the MCP server had
+  fully deregistered, not just gone slow. Same fix either way: tell the
+  user, wait for a restart, don't keep retrying indefinitely.
 - **Check for stale background processes before starting dev servers.**
   `nohup`'d `uvicorn`/`vite` processes from earlier sessions can survive
   a dropped connection and keep running, causing confusing "address
@@ -405,12 +461,11 @@ and Journal).
 
 ## 7. Natural next step
 
-The AI layer is now done through everything the original vision doc
-named (semantic search, task suggestions, study coach quizzes). There
-isn't an obvious "next AI feature" queued up anymore — this is genuinely
-open territory. If the user wants more AI work, that means a fresh
-"what should this actually do" conversation, not just continuing down a
-pre-set list.
+The AI layer now covers everything the original vision doc named, plus
+one more the user asked for (ask-your-notes RAG chat). There's no queued
+"next AI feature" — this is genuinely open territory. If the user wants
+more AI work, that means a fresh "what should this actually do"
+conversation, not continuing down a pre-set list.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
