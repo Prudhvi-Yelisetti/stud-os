@@ -16,12 +16,13 @@ Vite frontend. Repo: https://github.com/Prudhvi-Yelisetti/stud-os
 **Current state: V1 is complete, tested, and genuinely usable daily.**
 Not a prototype — every feature below was built, then verified with real
 HTTP calls and/or a real browser (Playwright), not just "should work."
-**AI layer is now fully built through Phase 4, plus a subsequent audit
-pass**: semantic search (Phase 1), provider abstraction + task
+**AI layer is now fully built through Phase 4, plus two follow-up
+sessions**: semantic search (Phase 1), provider abstraction + task
 suggestions (Phase 2), study-coach quiz generation (Phase 3),
-ask-your-notes RAG chat (Phase 4), and a session-9 audit that fixed a
-quiz-truncation bug and added markdown rendering to AI outputs — see §3
-and §7.
+ask-your-notes RAG chat (Phase 4), a session-9 audit that fixed a
+quiz-truncation bug and added markdown rendering to AI outputs, and a
+session-10 addition of Ollama/LM Studio as local, keyless providers —
+see §3 and §7.
 
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
@@ -53,7 +54,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 98 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 101 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -386,6 +387,38 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
    processes left running, Aether's processes on 8000/8020 untouched
    throughout. No Desktop Commander drops this session. Committed,
    pushed, CI green.
+10. **Local AI providers (Ollama, LM Studio).** User asked to verify all
+    "popular" API options were covered and specifically named Ollama and
+    LM Studio as missing. Both speak the OpenAI chat-completions API, so
+    this reused `OpenAICompatibleProvider` as-is -- new registry entries,
+    not new code, exactly the design intent already documented in
+    `registry.py`'s module docstring. Two things the existing registry
+    couldn't express and needed adding: `requires_key` (local servers
+    don't check a key at all, so "configured" needed to stop meaning
+    "has a real secret set" for these two) and `base_url_env_key` (so a
+    local server on a non-default host/port -- Docker, LAN, custom port
+    -- can be reached without editing code). 3 new tests, suite at
+    101/101. Live-verified against a **real** local Ollama instance
+    already running on this machine (not a monkeypatch this time --
+    genuinely useful to have real hardware to test against): providers
+    list correctly showed both as `configured: true` with zero `.env`
+    changes, requesting a model that hadn't been pulled surfaced Ollama's
+    own clean error message as a 502 (not a crash), and -- after Ollama
+    stopped running partway through the session -- a plain "Connection
+    error" 502, which is the realistic everyday case for a local
+    provider and needed to degrade cleanly, not just the happy path.
+    **Desktop Commander dropped once this session**, but with a new
+    wrinkle worth flagging for future sessions: this time `Aether`'s
+    processes (port 8000/8020) and the system's own locally-running
+    Ollama service were *also* dead after recovery, and `uptime -s`
+    showed a boot time essentially at "now" -- strong evidence the whole
+    container was restarted, not just the MCP client reconnecting. This
+    wasn't caused by anything run this session (Aether was never
+    targeted by any command), but it's a stronger failure mode than the
+    six previous drops, which only ever took out this project's own dev
+    servers. Told the user directly rather than silently restarting
+    Aether on their behalf, since it's not this project's process to
+    manage. Committed, pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -423,7 +456,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (98 tests), isolated temp-DB fixture
+  tests/                 pytest suite (101 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -476,7 +509,17 @@ and Journal).
   `tool_search` stopped finding Desktop Commander's tools entirely and
   calling one directly by name failed immediately -- the MCP server had
   fully deregistered, not just gone slow. Same fix either way: tell the
-  user, wait for a restart, don't keep retrying indefinitely.
+  user, wait for a restart, don't keep retrying indefinitely. **A 7th
+  occurrence (AI local-providers session, §4 session 10) showed a new,
+  more severe variant**: not just this project's dev servers but
+  `Aether`'s processes (a different project entirely, ports 8000/8020)
+  and the machine's own Ollama service were also dead on recovery, and
+  `uptime -s` showed a boot time right around the drop -- strong
+  evidence the whole container got restarted that time, not just the
+  MCP client reconnecting. Nothing run this session touched Aether. If
+  this happens again: don't restart other projects' servers yourself
+  (not this project's to manage) -- tell the user plainly what died so
+  they can decide.
 - **Check for stale background processes before starting dev servers.**
   `nohup`'d `uvicorn`/`vite` processes from earlier sessions can survive
   a dropped connection and keep running, causing confusing "address
@@ -504,12 +547,16 @@ and Journal).
 ## 7. Natural next step
 
 The AI layer now covers everything the original vision doc named, plus
-one more the user asked for (ask-your-notes RAG chat), and has since had
-a full audit pass (session 9, §4) that fixed a real quiz-truncation bug
-and a markdown-rendering gap across all three AI-output surfaces. There's
-no queued "next AI feature" — this is genuinely open territory. If the
-user wants more AI work, that means a fresh "what should this actually
-do" conversation, not continuing down a pre-set list.
+one more the user asked for (ask-your-notes RAG chat), a full audit pass
+(session 9, §4) that fixed a real quiz-truncation bug and a
+markdown-rendering gap across all three AI-output surfaces, and local
+provider support (session 10, §4 — Ollama, LM Studio) so the app can run
+fully offline with no API key at all. Provider coverage is now: Anthropic,
+Gemini, OpenAI, OpenRouter, Groq, NVIDIA NIM, Ollama, LM Studio — a
+genuinely broad spread of hosted and local options. There's no queued
+"next AI feature" — this is genuinely open territory. If the user wants
+more AI work, that means a fresh "what should this actually do"
+conversation, not continuing down a pre-set list.
 
 One thing flagged but deliberately *not* changed during the audit: the
 "related notes" and "ask your notes" retrieval have no similarity-score
