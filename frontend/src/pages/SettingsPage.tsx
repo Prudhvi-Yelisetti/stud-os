@@ -13,9 +13,10 @@ export function SettingsPage() {
     <div className="h-full overflow-y-auto p-6">
       <h1 className="mb-1 text-xl font-semibold">Settings</h1>
       <p className="mb-6 text-sm text-neutral-500">
-        Semantic search always runs locally, free, with no setup. Chat-based features below need an API key --
-        add it to your <code className="rounded bg-neutral-900 px-1">.env</code> file (see{' '}
-        <code className="rounded bg-neutral-900 px-1">.env.example</code>), then pick a provider here.
+        Semantic search always runs locally, free, with no setup. The chat-based features below need a provider --
+        either an API key in your <code className="rounded bg-neutral-900 px-1">.env</code> file (see{' '}
+        <code className="rounded bg-neutral-900 px-1">.env.example</code>) or a local model server (Ollama, LM
+        Studio) with nothing to configure at all -- then pick one per feature here.
       </p>
 
       <div className="max-w-xl rounded bg-neutral-900">

@@ -22,6 +22,13 @@ def is_configured(provider_key: str) -> bool:
     preset = get_preset(provider_key)
     if preset is None:
         return False
+    if not preset.requires_key:
+        # Local servers (Ollama, LM Studio) don't check a key at all -- there's
+        # nothing to "configure" beyond having the server running, which we
+        # don't probe for here (same "no API call made" rule as the rest of
+        # this function). If it's not actually running, the request just
+        # fails at call time with a clear connection-refused error instead.
+        return True
     return bool(os.environ.get(preset.env_key))
 
 

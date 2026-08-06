@@ -34,7 +34,9 @@ All of V1 from the vision doc is built, tested, and in daily-usable shape:
     notes/journal as context, with sources shown and clickable
   - Bring your own API key for the chat-completion features (semantic
     search never needs one): Anthropic, Gemini, OpenAI, OpenRouter, Groq,
-    or NVIDIA NIM — pick per-feature in Settings. See "AI features" below.
+    or NVIDIA NIM — or run a model fully locally with Ollama or LM Studio,
+    no key or internet connection required. Pick per-feature in Settings.
+    See "AI features" below.
 
 **Not built, deliberately deferred:** real auth — it's a single hardcoded
 local user, fine for personal use, would need work before ever being
@@ -91,8 +93,9 @@ Semantic search works out of the box — it runs a small local embedding
 model (`all-MiniLM-L6-v2`, downloads once from HuggingFace on first use),
 no API key needed.
 
-The rest (task suggestions, study coach, ask-your-notes) need an API key
-from at least one provider:
+The rest (task suggestions, study coach, ask-your-notes) need a
+configured provider — either an API key for a hosted service, or a local
+model server (Ollama/LM Studio) with nothing to configure at all:
 
 ```bash
 cp .env.example .env
@@ -102,5 +105,11 @@ cp .env.example .env
 Then pick a provider per feature in **Settings** in the app — each
 feature can use a different provider, or none at all ("not configured"
 is a normal, expected state, not an error). Supported: Anthropic, Gemini,
-OpenAI, OpenRouter, Groq, NVIDIA NIM. See `.env.example` for the exact
-env var names and optional model overrides.
+OpenAI, OpenRouter, Groq, NVIDIA NIM, Ollama, LM Studio. See
+`.env.example` for the exact env var names and optional model overrides.
+
+Ollama and LM Studio run entirely on your own machine — no API key,
+no per-request cost, no data leaving your computer. Install either one,
+load/pull a model, start its local server, and it shows up in Settings
+with no `.env` changes needed (override the model or base URL there only
+if you're not using the defaults — see `.env.example`).

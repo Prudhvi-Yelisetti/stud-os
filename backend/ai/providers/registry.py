@@ -21,6 +21,10 @@ class ProviderPreset:
     model_env_key: str  # env var to override the default model
     default_model: str
     base_url: str | None = None  # only used by kind="openai_compatible"; None = provider's own default
+    base_url_env_key: str | None = None  # env var to override base_url -- for local servers on a
+    # non-default host/port (Docker, LAN machine, custom port), not just the model
+    requires_key: bool = True  # False for local servers (Ollama, LM Studio) that don't check a key at
+    # all -- for these, "configured" means "the base URL is set to something", not "a real secret exists"
 
 
 PROVIDER_PRESETS: list[ProviderPreset] = [
@@ -56,6 +60,20 @@ PROVIDER_PRESETS: list[ProviderPreset] = [
         env_key="NVIDIA_API_KEY", model_env_key="NVIDIA_MODEL",
         default_model="meta/llama-3.3-70b-instruct",
         base_url="https://integrate.api.nvidia.com/v1",
+    ),
+    ProviderPreset(
+        key="ollama", label="Ollama (local)", kind="openai_compatible",
+        env_key="OLLAMA_API_KEY", model_env_key="OLLAMA_MODEL",
+        default_model="llama3.1",
+        base_url="http://localhost:11434/v1", base_url_env_key="OLLAMA_BASE_URL",
+        requires_key=False,
+    ),
+    ProviderPreset(
+        key="lmstudio", label="LM Studio (local)", kind="openai_compatible",
+        env_key="LMSTUDIO_API_KEY", model_env_key="LMSTUDIO_MODEL",
+        default_model="local-model",
+        base_url="http://localhost:1234/v1", base_url_env_key="LMSTUDIO_BASE_URL",
+        requires_key=False,
     ),
 ]
 

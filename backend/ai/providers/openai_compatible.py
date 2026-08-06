@@ -13,9 +13,18 @@ class OpenAICompatibleProvider(AIProvider):
     def __init__(self, preset: ProviderPreset):
         self._preset = preset
         self._model = os.environ.get(preset.model_env_key, preset.default_model)
+        self._base_url = (
+            os.environ.get(preset.base_url_env_key, preset.base_url) if preset.base_url_env_key else preset.base_url
+        )
         api_key = os.environ.get(preset.env_key)
         if not api_key:
-            raise ProviderError(f"{preset.env_key} is not set")
+            if not preset.requires_key:
+                # Local OpenAI-compatible servers (Ollama, LM Studio) don't
+                # check the key, but the SDK still requires a non-empty
+                # string to construct a client.
+                api_key = "not-needed"
+            else:
+                raise ProviderError(f"{preset.env_key} is not set")
         self._api_key = api_key
 
     def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
@@ -26,8 +35,8 @@ class OpenAICompatibleProvider(AIProvider):
 
         try:
             client_kwargs = {"api_key": self._api_key}
-            if self._preset.base_url:
-                client_kwargs["base_url"] = self._preset.base_url
+            if self._base_url:
+                client_kwargs["base_url"] = self._base_url
             client = OpenAI(**client_kwargs)
 
             full_messages = ([{"role": "system", "content": system}] if system else []) + messages

@@ -11,8 +11,34 @@ from backend.ai.providers.base import ProviderError
 def test_list_providers_includes_all_presets(client):
     providers = client.get("/api/ai/providers").json()
     keys = {p["key"] for p in providers}
-    assert {"anthropic", "gemini", "openai", "openrouter", "groq", "nvidia_nim"} <= keys
+    assert {"anthropic", "gemini", "openai", "openrouter", "groq", "nvidia_nim", "ollama", "lmstudio"} <= keys
     assert all("configured" in p and "label" in p for p in providers)
+
+
+def test_local_providers_are_always_configured_without_a_key(client):
+    """Ollama/LM Studio don't check a key at all -- unlike every other
+    preset, they should show as usable with nothing set in .env."""
+    providers = {p["key"]: p for p in client.get("/api/ai/providers").json()}
+    assert providers["ollama"]["configured"] is True
+    assert providers["lmstudio"]["configured"] is True
+
+
+def test_local_provider_can_be_selected_with_no_api_key_set(client):
+    resp = client.put("/api/ai/settings/suggestions", json={"provider_key": "ollama"})
+    assert resp.status_code == 200
+    assert resp.json()["provider_key"] == "ollama"
+
+
+def test_local_provider_respects_base_url_override(monkeypatch):
+    """OLLAMA_BASE_URL should win over the built-in default -- e.g. Ollama
+    running in Docker or on another machine on the LAN, not localhost."""
+    from backend.ai.providers.openai_compatible import OpenAICompatibleProvider
+    from backend.ai.providers.registry import get_preset
+
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://192.168.1.50:11434/v1")
+    provider = OpenAICompatibleProvider(get_preset("ollama"))
+    assert provider._base_url == "http://192.168.1.50:11434/v1"
+    assert provider._api_key == "not-needed"  # never checked by Ollama, but the SDK needs a non-empty string
 
 
 def test_settings_default_is_unconfigured(client):
