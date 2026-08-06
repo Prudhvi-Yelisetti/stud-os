@@ -1,6 +1,6 @@
 import os
 
-from backend.ai.providers.base import AIProvider, ProviderError
+from backend.ai.providers.base import AIProvider, DEFAULT_MAX_TOKENS, ProviderError
 from backend.ai.providers.registry import ProviderPreset
 
 
@@ -18,7 +18,7 @@ class OpenAICompatibleProvider(AIProvider):
             raise ProviderError(f"{preset.env_key} is not set")
         self._api_key = api_key
 
-    def chat(self, messages: list[dict], system: str | None = None) -> str:
+    def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
         try:
             from openai import OpenAI
         except ImportError as e:
@@ -31,7 +31,9 @@ class OpenAICompatibleProvider(AIProvider):
             client = OpenAI(**client_kwargs)
 
             full_messages = ([{"role": "system", "content": system}] if system else []) + messages
-            response = client.chat.completions.create(model=self._model, messages=full_messages)
+            response = client.chat.completions.create(
+                model=self._model, messages=full_messages, max_tokens=max_tokens,
+            )
             return response.choices[0].message.content or ""
         except Exception as e:
             raise ProviderError(f"{self._preset.label} request failed: {e}") from e

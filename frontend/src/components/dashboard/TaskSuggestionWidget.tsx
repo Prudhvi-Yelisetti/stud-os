@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { aiApi } from '../../lib/ai'
+import { MarkdownText } from '../shared/MarkdownText'
 
 export function TaskSuggestionWidget() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['task-suggestions'],
     queryFn: aiApi.taskSuggestions,
     // Calls a paid API per request for some providers -- don't refetch
@@ -35,5 +36,16 @@ export function TaskSuggestionWidget() {
     )
   }
 
-  return <p className="text-sm text-neutral-300">{data.suggestion}</p>
+  return (
+    <div>
+      <MarkdownText content={data.suggestion ?? ''} />
+      <button
+        onClick={() => refetch()}
+        disabled={isFetching}
+        className="mt-2 text-xs text-neutral-600 hover:text-neutral-400 disabled:opacity-50"
+      >
+        {isFetching ? 'Refreshing…' : 'Refresh'}
+      </button>
+    </div>
+  )
 }

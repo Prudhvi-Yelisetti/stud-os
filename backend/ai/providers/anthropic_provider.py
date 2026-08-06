@@ -1,6 +1,6 @@
 import os
 
-from backend.ai.providers.base import AIProvider, ProviderError
+from backend.ai.providers.base import AIProvider, DEFAULT_MAX_TOKENS, ProviderError
 from backend.ai.providers.registry import ProviderPreset
 
 
@@ -13,7 +13,7 @@ class AnthropicProvider(AIProvider):
             raise ProviderError(f"{preset.env_key} is not set")
         self._api_key = api_key
 
-    def chat(self, messages: list[dict], system: str | None = None) -> str:
+    def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
         try:
             import anthropic
         except ImportError as e:
@@ -21,7 +21,7 @@ class AnthropicProvider(AIProvider):
 
         try:
             client = anthropic.Anthropic(api_key=self._api_key)
-            kwargs = {"model": self._model, "max_tokens": 1024, "messages": messages}
+            kwargs = {"model": self._model, "max_tokens": max_tokens, "messages": messages}
             if system:
                 kwargs["system"] = system
             response = client.messages.create(**kwargs)

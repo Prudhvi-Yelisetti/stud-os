@@ -254,6 +254,11 @@ def generate_quiz(
         reply = provider.chat(
             messages=[{"role": "user", "content": prompt}],
             system="You are a study-quiz generator. You only ever respond with raw JSON, never prose.",
+            # Scale the reply budget with question count -- a fixed cap sized
+            # for a couple of questions truncates a 10-question quiz mid-JSON,
+            # which fails to parse and shows up as a confusing "invalid quiz"
+            # error rather than an obviously-a-length-problem one.
+            max_tokens=min(300 + count * 350, 8192),
         )
     except ProviderError as e:
         raise HTTPException(status_code=502, detail=str(e))

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { aiApi } from '../../lib/ai'
+import { MarkdownText } from '../shared/MarkdownText'
 import type { QuizQuestion } from '../../lib/api'
 
 export function QuizPanel({ chapterId }: { chapterId: string }) {
@@ -132,7 +133,7 @@ function QuizQuestionView({
 
       {picked !== null && (
         <div className="mt-3">
-          <p className="text-xs text-neutral-400">{question.explanation}</p>
+          <MarkdownText content={question.explanation} className="text-xs text-neutral-400" />
           <button onClick={onNext} className="mt-2 rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700">
             {questionNumber >= total ? 'Finish' : 'Next question'}
           </button>

@@ -1,6 +1,6 @@
 import os
 
-from backend.ai.providers.base import AIProvider, ProviderError
+from backend.ai.providers.base import AIProvider, DEFAULT_MAX_TOKENS, ProviderError
 from backend.ai.providers.registry import ProviderPreset
 
 
@@ -13,7 +13,7 @@ class GeminiProvider(AIProvider):
             raise ProviderError(f"{preset.env_key} is not set")
         self._api_key = api_key
 
-    def chat(self, messages: list[dict], system: str | None = None) -> str:
+    def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
         try:
             from google import genai
             from google.genai import types
@@ -29,7 +29,10 @@ class GeminiProvider(AIProvider):
                 )
                 for m in messages
             ]
-            config = types.GenerateContentConfig(system_instruction=system) if system else None
+            config = types.GenerateContentConfig(
+                system_instruction=system if system else None,
+                max_output_tokens=max_tokens,
+            )
             response = client.models.generate_content(model=self._model, contents=contents, config=config)
             return response.text or ""
         except Exception as e:

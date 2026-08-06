@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { aiApi } from '../lib/ai'
 import { notebooksApi } from '../lib/notebooks'
+import { MarkdownText } from '../components/shared/MarkdownText'
 import type { AskMessage, AskSource } from '../lib/api'
 
 interface DisplayMessage extends AskMessage {
@@ -93,7 +94,7 @@ export function AskPage() {
           {messages.map((m, i) => (
             <div key={i} className={m.role === 'user' ? 'ml-auto max-w-[80%]' : 'max-w-[80%]'}>
               <div className={`rounded px-3 py-2 text-sm ${m.role === 'user' ? 'bg-neutral-800' : 'bg-neutral-900'}`}>
-                {m.content}
+                {m.role === 'assistant' ? <MarkdownText content={m.content} /> : m.content}
               </div>
               {m.sources && m.sources.length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">

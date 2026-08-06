@@ -50,7 +50,7 @@ def test_quiz_generates_and_parses_questions(client, monkeypatch):
     client.put("/api/ai/settings/study", json={"provider_key": "anthropic"})
     ch = _seed_chapter(client)
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, max_tokens=None):
         assert "Recursion" in messages[0]["content"]
         return _VALID_QUIZ_REPLY
 
@@ -69,7 +69,7 @@ def test_quiz_tolerates_markdown_fenced_json(client, monkeypatch):
     client.put("/api/ai/settings/study", json={"provider_key": "anthropic"})
     ch = _seed_chapter(client)
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, max_tokens=None):
         return f"```json\n{_VALID_QUIZ_REPLY}\n```"
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -78,12 +78,38 @@ def test_quiz_tolerates_markdown_fenced_json(client, monkeypatch):
     assert len(resp["questions"]) == 1
 
 
+def test_quiz_scales_max_tokens_with_question_count(client, monkeypatch):
+    """A fixed reply budget sized for a couple of questions truncates a
+    10-question quiz mid-JSON (parses as invalid, not obviously a length
+    problem) -- the endpoint should ask for more room as `count` grows."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    client.put("/api/ai/settings/study", json={"provider_key": "anthropic"})
+    ch = _seed_chapter(client)
+
+    captured = {}
+
+    def fake_chat(self, messages, system=None, max_tokens=None):
+        captured["max_tokens"] = max_tokens
+        return _VALID_QUIZ_REPLY
+
+    monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
+
+    client.post(f"/api/ai/study/quiz/{ch['id']}?count=2")
+    small = captured["max_tokens"]
+
+    client.post(f"/api/ai/study/quiz/{ch['id']}?count=10")
+    large = captured["max_tokens"]
+
+    assert small < large
+    assert large > 1024  # the old fixed cap that used to truncate big quizzes
+
+
 def test_quiz_surfaces_malformed_response_as_502(client, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     client.put("/api/ai/settings/study", json={"provider_key": "anthropic"})
     ch = _seed_chapter(client)
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, max_tokens=None):
         return "not valid json at all"
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -101,7 +127,7 @@ def test_quiz_rejects_out_of_range_correct_index(client, monkeypatch):
         "question": "?", "choices": ["a", "b"], "correct_index": 9, "explanation": "e",
     }]})
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, max_tokens=None):
         return bad_reply
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
