@@ -16,9 +16,11 @@ Vite frontend. Repo: https://github.com/Prudhvi-Yelisetti/stud-os
 **Current state: V1 is complete, tested, and genuinely usable daily.**
 Not a prototype — every feature below was built, then verified with real
 HTTP calls and/or a real browser (Playwright), not just "should work."
-**AI layer is now fully built through Phase 4**: semantic search (Phase
-1), provider abstraction + task suggestions (Phase 2), study-coach quiz
-generation (Phase 3), and ask-your-notes RAG chat (Phase 4) — see §3
+**AI layer is now fully built through Phase 4, plus a subsequent audit
+pass**: semantic search (Phase 1), provider abstraction + task
+suggestions (Phase 2), study-coach quiz generation (Phase 3),
+ask-your-notes RAG chat (Phase 4), and a session-9 audit that fixed a
+quiz-truncation bug and added markdown rendering to AI outputs — see §3
 and §7.
 
 **Going open-source, not just personal use.** Decided in the AI-layer
@@ -51,7 +53,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 97 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 98 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -344,15 +346,55 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
    restart with no work lost (everything from before each drop was
    already written and verified). 8 new tests, suite at 97/97;
    `qa_check.py` extended to 30 checks. Committed, pushed, CI green.
+9. **AI layer audit + fixes.** User asked to go through the four AI
+   features and improve them, without naming a specific target --
+   scoped it myself by reading every file in `backend/ai/`, all three
+   provider adapters, `routers/ai.py`, and the AI-related frontend
+   (AskPage, QuizPanel, RelatedNotesPanel, TaskSuggestionWidget,
+   SettingsPage) before deciding what was actually worth fixing, rather
+   than inventing busywork. Found one real bug: `AnthropicProvider.chat()`
+   had `max_tokens` hardcoded to 1024 -- a quiz with several questions
+   (question + 4 choices + explanation each, as JSON) can exceed that,
+   gets cut off mid-object, fails to parse, and surfaces as a confusing
+   "invalid quiz" error rather than an obviously-a-length-problem one.
+   Fixed by adding `max_tokens` to the `AIProvider.chat()` interface
+   (default raised 1024 -> 4096) across all three adapters, and having
+   the quiz endpoint scale its request with question count
+   (`min(300 + count*350, 8192)`) instead of relying on the fixed
+   default. Also fixed a real UX gap: AI replies (ask-notes answers,
+   task suggestions, quiz explanations) were rendering literal `**`/`-`
+   characters instead of formatted markdown -- built a shared
+   `MarkdownText` component (deliberately simpler than `WikiLinkText`,
+   no wiki-link resolution needed for AI output) and wired it into all
+   three spots, plus added a manual refresh button to the task-suggestion
+   widget so suggestions can be updated without waiting out the 5-minute
+   `staleTime`. Considered adding a similarity-score threshold to
+   related-notes/ask retrieval to cut noise from weakly-related results,
+   but backed off -- the existing test
+   (`test_ask_retrieves_relevant_context_and_returns_sources`)
+   deliberately asserts that even a clearly unrelated chunk still shows
+   up (just ranked lower), which is an intentional design choice for
+   small personal corpora, not a bug; didn't want to fight that on a
+   guess. 1 new backend test (suite at 98/98). Live-verified with the
+   same throwaway-monkeypatch-script pattern as Phases 3/4 (seeded a
+   real notebook/chapter/task via curl, patched `AnthropicProvider.chat`
+   to return markdown-rich canned replies, clicked through the dashboard
+   widget, the Ask page, and a full two-question quiz in a real browser)
+   -- confirmed bold/italic/lists render correctly in all three spots
+   and that quiz scoring, ask sources, and the new refresh button all
+   still work. Script deleted after use, dev DB wiped, no stray
+   processes left running, Aether's processes on 8000/8020 untouched
+   throughout. No Desktop Commander drops this session. Committed,
+   pushed, CI green.
 
-**A pattern worth naming, now used twice (Phases 3 and 4):** when no real
-API key is available for live-verifying a provider-backed feature,
-monkeypatching the provider's `chat()` method in a throwaway,
-never-committed script (run from outside the repo) and pointing the real
-frontend at it is a good way to verify actual UI behavior end-to-end
-without either skipping live verification or leaving test scaffolding in
-the codebase. Delete the script after use; never let anything like it
-get committed.
+**A pattern worth naming, now used three times (Phases 3, 4, and the AI
+audit):** when no real API key is available for live-verifying a
+provider-backed feature, monkeypatching the provider's `chat()` method in
+a throwaway, never-committed script (run from outside the repo) and
+pointing the real frontend at it is a good way to verify actual UI
+behavior end-to-end without either skipping live verification or leaving
+test scaffolding in the codebase. Delete the script after use; never let
+anything like it get committed.
 
 **The pattern that got established, worth continuing:** every change —
 UI or backend — gets typechecked, run through pytest, and *actually
@@ -381,7 +423,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (97 tests), isolated temp-DB fixture
+  tests/                 pytest suite (98 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -462,10 +504,22 @@ and Journal).
 ## 7. Natural next step
 
 The AI layer now covers everything the original vision doc named, plus
-one more the user asked for (ask-your-notes RAG chat). There's no queued
-"next AI feature" — this is genuinely open territory. If the user wants
-more AI work, that means a fresh "what should this actually do"
-conversation, not continuing down a pre-set list.
+one more the user asked for (ask-your-notes RAG chat), and has since had
+a full audit pass (session 9, §4) that fixed a real quiz-truncation bug
+and a markdown-rendering gap across all three AI-output surfaces. There's
+no queued "next AI feature" — this is genuinely open territory. If the
+user wants more AI work, that means a fresh "what should this actually
+do" conversation, not continuing down a pre-set list.
+
+One thing flagged but deliberately *not* changed during the audit: the
+"related notes" and "ask your notes" retrieval have no similarity-score
+threshold, so a weakly- or un-related chunk can still show up (just
+ranked lower) instead of being filtered out. This looked like a possible
+quality improvement but existing test intent
+(`test_ask_retrieves_relevant_context_and_returns_sources`) suggests it's
+deliberate for small personal corpora, not an oversight — if it ever
+becomes a real annoyance in practice, that's a "confirm with the user
+first" conversation, not a unilateral fix.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
