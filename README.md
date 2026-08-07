@@ -34,9 +34,10 @@ All of V1 from the vision doc is built, tested, and in daily-usable shape:
     notes/journal as context, with sources shown and clickable
   - Bring your own API key for the chat-completion features (semantic
     search never needs one): Anthropic, Gemini, OpenAI, OpenRouter, Groq,
-    or NVIDIA NIM — or run a model fully locally with Ollama or LM Studio,
-    no key or internet connection required. Pick per-feature in Settings.
-    See "AI features" below.
+    NVIDIA NIM, DeepSeek, Mistral AI, xAI (Grok), or Perplexity (Sonar) —
+    or run a model fully locally with Ollama or LM Studio, no key or
+    internet connection required. Pick per-feature in Settings. See
+    "AI features" below.
 
 **Not built, deliberately deferred:** real auth — it's a single hardcoded
 local user, fine for personal use, would need work before ever being
@@ -105,8 +106,9 @@ cp .env.example .env
 Then pick a provider per feature in **Settings** in the app — each
 feature can use a different provider, or none at all ("not configured"
 is a normal, expected state, not an error). Supported: Anthropic, Gemini,
-OpenAI, OpenRouter, Groq, NVIDIA NIM, Ollama, LM Studio. See
-`.env.example` for the exact env var names and optional model overrides.
+OpenAI, OpenRouter, Groq, NVIDIA NIM, DeepSeek, Mistral AI, xAI (Grok),
+Perplexity (Sonar), Ollama, LM Studio. See `.env.example` for the exact
+env var names and optional model overrides.
 
 Ollama and LM Studio run entirely on your own machine — no API key,
 no per-request cost, no data leaving your computer. Install either one,

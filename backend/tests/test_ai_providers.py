@@ -8,10 +8,34 @@ without real credentials in the environment.
 from backend.ai.providers.base import ProviderError
 
 
+def test_every_openai_compatible_preset_constructs_a_client(monkeypatch):
+    """Catches typos in a preset's env_key/base_url before they ship --
+    each new hosted provider (DeepSeek, Mistral, xAI, Perplexity, ...)
+    should construct cleanly given its own key set, same as the
+    long-standing ones."""
+    from backend.ai.providers.openai_compatible import OpenAICompatibleProvider
+    from backend.ai.providers.registry import PROVIDER_PRESETS
+
+    for preset in PROVIDER_PRESETS:
+        if preset.kind != "openai_compatible":
+            continue
+        if preset.requires_key:
+            monkeypatch.setenv(preset.env_key, "test-key")
+        provider = OpenAICompatibleProvider(preset)
+        assert provider._model == preset.default_model
+        if preset.base_url:
+            assert provider._base_url == preset.base_url
+        if preset.requires_key:
+            monkeypatch.delenv(preset.env_key)
+
+
 def test_list_providers_includes_all_presets(client):
     providers = client.get("/api/ai/providers").json()
     keys = {p["key"] for p in providers}
-    assert {"anthropic", "gemini", "openai", "openrouter", "groq", "nvidia_nim", "ollama", "lmstudio"} <= keys
+    assert {
+        "anthropic", "gemini", "openai", "openrouter", "groq", "nvidia_nim",
+        "deepseek", "mistral", "xai", "perplexity", "ollama", "lmstudio",
+    } <= keys
     assert all("configured" in p and "label" in p for p in providers)
 
 

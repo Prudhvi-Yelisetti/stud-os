@@ -1,8 +1,8 @@
 """
 Known provider presets. Each entry describes how to reach one provider --
-adding a new OpenAI-compatible service later (say, Together or DeepSeek)
-is a new dict here, not new code. `kind` picks which adapter class in
-factory.py handles it.
+adding another OpenAI-compatible service later (hosted or local) is a new
+dict here, not new code. `kind` picks which adapter class in factory.py
+handles it.
 
 Model names drift over time and this is an open-source project other
 people will run long after this was written, so every preset's default
@@ -60,6 +60,30 @@ PROVIDER_PRESETS: list[ProviderPreset] = [
         env_key="NVIDIA_API_KEY", model_env_key="NVIDIA_MODEL",
         default_model="meta/llama-3.3-70b-instruct",
         base_url="https://integrate.api.nvidia.com/v1",
+    ),
+    ProviderPreset(
+        key="deepseek", label="DeepSeek", kind="openai_compatible",
+        env_key="DEEPSEEK_API_KEY", model_env_key="DEEPSEEK_MODEL",
+        default_model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com/v1",
+    ),
+    ProviderPreset(
+        key="mistral", label="Mistral AI", kind="openai_compatible",
+        env_key="MISTRAL_API_KEY", model_env_key="MISTRAL_MODEL",
+        default_model="mistral-small-latest",
+        base_url="https://api.mistral.ai/v1",
+    ),
+    ProviderPreset(
+        key="xai", label="xAI (Grok)", kind="openai_compatible",
+        env_key="XAI_API_KEY", model_env_key="XAI_MODEL",
+        default_model="grok-4",
+        base_url="https://api.x.ai/v1",
+    ),
+    ProviderPreset(
+        key="perplexity", label="Perplexity (Sonar)", kind="openai_compatible",
+        env_key="PERPLEXITY_API_KEY", model_env_key="PERPLEXITY_MODEL",
+        default_model="sonar",
+        base_url="https://api.perplexity.ai",
     ),
     ProviderPreset(
         key="ollama", label="Ollama (local)", kind="openai_compatible",
