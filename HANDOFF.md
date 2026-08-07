@@ -16,13 +16,14 @@ Vite frontend. Repo: https://github.com/Prudhvi-Yelisetti/stud-os
 **Current state: V1 is complete, tested, and genuinely usable daily.**
 Not a prototype — every feature below was built, then verified with real
 HTTP calls and/or a real browser (Playwright), not just "should work."
-**AI layer is now fully built through Phase 4, plus two follow-up
+**AI layer is now fully built through Phase 4, plus three follow-up
 sessions**: semantic search (Phase 1), provider abstraction + task
 suggestions (Phase 2), study-coach quiz generation (Phase 3),
 ask-your-notes RAG chat (Phase 4), a session-9 audit that fixed a
-quiz-truncation bug and added markdown rendering to AI outputs, and a
-session-10 addition of Ollama/LM Studio as local, keyless providers —
-see §3 and §7.
+quiz-truncation bug and added markdown rendering to AI outputs, a
+session-10 addition of Ollama/LM Studio as local, keyless providers, and
+a session-11 addition of DeepSeek/Mistral/xAI/Perplexity — 12 providers
+total now — see §3 and §7.
 
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
@@ -54,7 +55,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 101 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 102 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -419,6 +420,39 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     servers. Told the user directly rather than silently restarting
     Aether on their behalf, since it's not this project's process to
     manage. Committed, pushed, CI green.
+11. **Restarted Aether + Ollama, then added 4 more hosted providers.**
+    Opened by the user asking what was actually wrong with Aether/Ollama
+    (from session 10's flagged container-restart theory) -- confirmed
+    both still down, then restarted Aether's dev backend (known nohup
+    command from session 10's notes) and its AppImage (found at
+    `~/Aether-x86_64.AppImage`), and started Ollama via `ollama serve`
+    (installed as a plain binary, not a systemd service). All three came
+    up healthy. Then the actual task: user asked to add "all famous,
+    mostly used" API providers. Researched current (Aug 2026) provider
+    landscape via web search rather than relying on training-data
+    knowledge, which would be stale for model names/endpoints in a
+    fast-moving space -- confirmed exact base URLs and current default
+    model names for each before adding anything. Added DeepSeek, Mistral
+    AI, xAI (Grok), and Perplexity (Sonar) -- all four speak the OpenAI
+    chat-completions format, so like Ollama/LM Studio before them this
+    was registry entries, not new adapter code. Provider coverage is now
+    12 total, which reasonably covers "all famous, mostly used" hosted
+    + local options as of this writing. Added a new regression test that
+    constructs a client for *every* `openai_compatible` preset in the
+    registry (not just the new ones), so a typo'd env_key or base_url in
+    a future addition fails a test instead of shipping silently. 1 new
+    test, suite at 102/102. Live-verified via curl (provider list shows
+    correct keys/labels) and a real browser (Settings page dropdowns
+    show all four, correctly disabled without a key, exactly like the
+    long-standing providers). Could not live-verify actual chat
+    completions against these four specifically -- no real API keys for
+    them were available this session, same "bring your own key" boundary
+    as the original 6 hosted providers when they were first built.
+    Ollama died again by the time cleanup ran (container reset between
+    sessions, confirmed via `uptime -s` again, not something this
+    session's commands caused) -- noted rather than chased, since
+    restarting it wasn't part of what was asked this time. Committed,
+    pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -456,7 +490,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (101 tests), isolated temp-DB fixture
+  tests/                 pytest suite (102 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -519,7 +553,16 @@ and Journal).
   MCP client reconnecting. Nothing run this session touched Aether. If
   this happens again: don't restart other projects' servers yourself
   (not this project's to manage) -- tell the user plainly what died so
-  they can decide.
+  they can decide. **Session 11 confirmed this isn't only tied to
+  Desktop Commander drops**: `uptime -s` showed another fresh boot at
+  the *start* of that session, with no drop involved at all -- Aether
+  and Ollama were already down before any tool even ran. This looks
+  like the container recycling between sessions generally, not
+  specifically an MCP-reconnect side effect. Practical takeaway: at the
+  start of *any* session, don't assume background processes (this
+  project's or others') survived from before -- check with `ps aux` /
+  a health-check curl first, same as the existing stale-process check
+  below, rather than only doing that check after an explicit drop.
 - **Check for stale background processes before starting dev servers.**
   `nohup`'d `uvicorn`/`vite` processes from earlier sessions can survive
   a dropped connection and keep running, causing confusing "address
@@ -549,13 +592,18 @@ and Journal).
 The AI layer now covers everything the original vision doc named, plus
 one more the user asked for (ask-your-notes RAG chat), a full audit pass
 (session 9, §4) that fixed a real quiz-truncation bug and a
-markdown-rendering gap across all three AI-output surfaces, and local
-provider support (session 10, §4 — Ollama, LM Studio) so the app can run
-fully offline with no API key at all. Provider coverage is now: Anthropic,
-Gemini, OpenAI, OpenRouter, Groq, NVIDIA NIM, Ollama, LM Studio — a
-genuinely broad spread of hosted and local options. There's no queued
-"next AI feature" — this is genuinely open territory. If the user wants
-more AI work, that means a fresh "what should this actually do"
+markdown-rendering gap across all three AI-output surfaces, and two
+rounds of provider expansion (sessions 10 and 11, §4) so the app can run
+fully offline with no API key at all, or with whichever hosted provider
+someone already has a key for. Provider coverage is now 12 total:
+Anthropic, Gemini, OpenAI, OpenRouter, Groq, NVIDIA NIM, DeepSeek,
+Mistral AI, xAI (Grok), Perplexity (Sonar), Ollama, LM Studio — a
+genuinely broad spread of hosted and local options, reasonably close to
+"every popular one" as of when this was written (model names/endpoints
+in this space drift fast, so verify current details via web search
+before adding another rather than trusting stale memory). There's no
+queued "next AI feature" — this is genuinely open territory. If the user
+wants more AI work, that means a fresh "what should this actually do"
 conversation, not continuing down a pre-set list.
 
 One thing flagged but deliberately *not* changed during the audit: the
