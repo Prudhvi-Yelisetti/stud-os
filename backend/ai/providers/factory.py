@@ -34,7 +34,7 @@ def is_configured(provider_key: str) -> bool:
 
 def list_providers_with_status() -> list[dict]:
     return [
-        {"key": p.key, "label": p.label, "configured": is_configured(p.key)}
+        {"key": p.key, "label": p.label, "configured": is_configured(p.key), "requires_key": p.requires_key}
         for p in PROVIDER_PRESETS
     ]
 

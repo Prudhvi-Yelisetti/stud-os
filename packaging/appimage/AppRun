@@ -11,7 +11,9 @@
 # entirely optional and per-feature opt-in via Settings -- this script
 # does not start or require Ollama, LM Studio, or any hosted provider.
 # Semantic search works out of the box with no setup either way (it's a
-# local embedding model, not an API call).
+# local embedding model, not an API call). Provider API keys, if you add
+# any, are entered in Settings and land in $DATA_DIR/.env (see
+# ENV_FILE_PATH below) -- never inside the read-only AppImage itself.
 #
 # AppImages mount read-only (a FUSE-mounted squashfs at a fresh path
 # each run), so the SQLite DB and logs live in a real, writable
@@ -67,6 +69,7 @@ else
     (cd "$DATA_DIR" && \
         DATABASE_URL="sqlite:///$DATA_DIR/stud_os.db" \
         FRONTEND_DIST="$HERE/usr/frontend-build" \
+        ENV_FILE_PATH="$DATA_DIR/.env" \
         exec "$PYTHON" -m uvicorn backend.main:app \
             --app-dir "$HERE/usr/app" \
             --host 127.0.0.1 --port "$PORT" \

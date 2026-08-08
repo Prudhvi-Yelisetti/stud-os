@@ -19,9 +19,11 @@ from backend.database.models.tasks import Task, TaskStatus
 from backend.database.models.notes import Chapter, Notebook
 from backend.dependencies import get_current_user
 from backend.ai.providers.factory import list_providers_with_status, get_provider, is_configured
+from backend.ai.providers.registry import get_preset
 from backend.ai.providers.base import ProviderError
 from backend.ai.json_reply import parse_json_reply
 from backend.ai.embeddings import embed_text, cosine_similarity
+from backend.ai.env_file import upsert_key
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -30,6 +32,14 @@ class ProviderStatus(BaseModel):
     key: str
     label: str
     configured: bool
+    requires_key: bool
+
+
+class ProviderKeyIn(BaseModel):
+    # Empty string or omitted clears the key rather than setting an
+    # empty one -- "remove my key" is a real, distinct action from the
+    # UI (a "Remove" button posts this), not just an edge case to reject.
+    api_key: str | None = None
 
 
 class AISettingsOut(BaseModel):
@@ -97,6 +107,25 @@ class AskOut(BaseModel):
 @router.get("/providers", response_model=list[ProviderStatus])
 def list_providers():
     return list_providers_with_status()
+
+
+@router.put("/providers/{provider_key}/key", response_model=ProviderStatus)
+def set_provider_key(provider_key: str, payload: ProviderKeyIn):
+    """Writes (or clears) one provider's API key into the .env file --
+    the Settings UI's alternative to hand-editing .env yourself. Never
+    stored in the database: same "keys never touch the DB" boundary the
+    provider abstraction has had since it was first built, just with a
+    friendlier way to get the key into the one place it's ever read
+    from. Takes effect immediately (no restart) -- see env_file.py."""
+    preset = get_preset(provider_key)
+    if preset is None:
+        raise HTTPException(status_code=404, detail=f"Unknown provider '{provider_key}'")
+
+    upsert_key(preset.env_key, payload.api_key)
+    return {
+        "key": preset.key, "label": preset.label,
+        "configured": is_configured(preset.key), "requires_key": preset.requires_key,
+    }
 
 
 @router.get("/settings/{feature}", response_model=AISettingsOut)

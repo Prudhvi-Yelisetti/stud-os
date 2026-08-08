@@ -141,6 +141,7 @@ export interface AIProviderStatus {
   key: string
   label: string
   configured: boolean
+  requires_key: boolean
 }
 
 export interface AISettings {

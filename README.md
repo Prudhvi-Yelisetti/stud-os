@@ -118,17 +118,22 @@ no API key needed.
 
 The rest (task suggestions, study coach, ask-your-notes) need a
 configured provider — either an API key for a hosted service, or a local
-model server (Ollama/LM Studio) with nothing to configure at all:
+model server (Ollama/LM Studio) with nothing to configure at all.
 
+The easiest way to add a key: open **Settings** in the app and paste it
+into the provider's key field there — it writes straight into your
+`.env` file for you (never into the database) and takes effect
+immediately, no restart. Editing `.env` by hand still works too, if you
+prefer:
 ```bash
 cp .env.example .env
 # fill in whichever provider(s) you want, e.g. ANTHROPIC_API_KEY=...
 ```
 
-Then pick a provider per feature in **Settings** in the app — each
-feature can use a different provider, or none at all ("not configured"
-is a normal, expected state, not an error). Supported: Anthropic, Gemini,
-OpenAI, OpenRouter, Groq, NVIDIA NIM, DeepSeek, Mistral AI, xAI (Grok),
+Then pick a provider per feature in **Settings** — each feature can use
+a different provider, or none at all ("not configured" is a normal,
+expected state, not an error). Supported: Anthropic, Gemini, OpenAI,
+OpenRouter, Groq, NVIDIA NIM, DeepSeek, Mistral AI, xAI (Grok),
 Perplexity (Sonar), Ollama, LM Studio. See `.env.example` for the exact
 env var names and optional model overrides.
 

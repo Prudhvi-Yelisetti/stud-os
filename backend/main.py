@@ -1,6 +1,7 @@
+from backend.ai.env_file import ENV_FILE
 from dotenv import load_dotenv
 
-load_dotenv()  # must run before any AI provider reads its API key from the env
+load_dotenv(dotenv_path=ENV_FILE)  # must run before any AI provider reads its API key from the env
 
 import os
 from pathlib import Path
