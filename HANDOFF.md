@@ -25,6 +25,11 @@ session-10 addition of Ollama/LM Studio as local, keyless providers, and
 a session-11 addition of DeepSeek/Mistral/xAI/Perplexity — 12 providers
 total now — see §3 and §7.
 
+**Packaged as a self-contained AppImage (session 12, §4).** One process,
+one port — FastAPI serves the built frontend itself, no separate
+frontend server, no manual migrations. `./packaging/appimage/build.sh`
+→ `Stud-OS-x86_64.AppImage`. See README's "Packaged desktop app" section.
+
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
 hardcoded secrets, provider abstraction so contributors/users bring
@@ -55,7 +60,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 102 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 104 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -453,6 +458,63 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     session's commands caused) -- noted rather than chased, since
     restarting it wasn't part of what was asked this time. Committed,
     pushed, CI green.
+12. **Packaged as a self-contained AppImage.** User asked to "create an
+    application for this product" -- clarified first rather than
+    guessing (options: packaged desktop app / landing page / mobile app
+    / something else), then built from Aether's proven
+    `packaging/appimage/` pattern on this same machine as a reference,
+    since it's already solved this exact problem once. Deliberately
+    diverged from Aether's architecture in one important way: Aether
+    runs backend and frontend as two separate processes (a plain
+    `python -m http.server` for the static frontend), which only works
+    because its frontend bakes in the backend's URL at build time.
+    Stud-OS's frontend already calls relative `/api/...` paths (the dev
+    proxy in vite.config.ts), so instead FastAPI itself now optionally
+    serves the built frontend from the same process/port when a new
+    `FRONTEND_DIST` env var is set (`backend/main.py`, a no-op when
+    unset, i.e. every normal dev session) -- one process, one port, no
+    build-time URL baking needed at all. Hit one real, easy-to-get-wrong
+    detail while adapting Aether's `AppRun`: Stud-OS imports itself as
+    the `backend` package (`from backend.database import ...`, same as
+    dev requiring the repo root on the path), unlike Aether's flat
+    `main.py`, so `--app-dir` has to point one level *above* the copied
+    `backend/` folder, not at it -- caught by checking alembic.ini's
+    `prepend_sys_path=.` (which also meant the seed-DB migration step in
+    `build.sh` has to run with CWD at the repo root, exactly like the
+    documented dev workflow, not via a hand-rolled PYTHONPATH). Also
+    reapplied the CPU-only-torch-first fix (already documented in this
+    file for plain dev installs) inside `build.sh`, since
+    sentence-transformers pulls the same unwanted ~2.5GB of CUDA
+    packages in a fresh packaging venv too. Found and fixed a real,
+    unrelated doc bug along the way: README's backend-run instructions
+    said `cd backend` then run `uvicorn backend.main:app`, which never
+    actually worked, for the same package-layout reason as the AppRun
+    detail above. 2 new tests (`test_frontend_static_serving.py`) cover
+    both the static/SPA-fallback serving and that it's a true no-op
+    without `FRONTEND_DIST`; suite at 104/104. **Fully built and
+    live-verified end to end, not just written and assumed correct**:
+    ran the real `build.sh` (hit a Desktop Commander drop mid-build --
+    see §6 -- but the build had actually already finished successfully
+    on the real machine by the time the tool connection recovered, so
+    nothing was lost), then actually launched the resulting
+    `Stud-OS-x86_64.AppImage` and, through a real browser: confirmed a
+    fresh install seeds the DB and serves a working UI; confirmed a
+    *hard* navigation to `/notes` (not a client-side link click) falls
+    back to `index.html` correctly, which is the part that actually
+    proves the packaging works, not just that React Router's client-side
+    routing works; created a real notebook through the actual packaged
+    binary and confirmed it persisted to
+    `~/.local/share/Stud-OS/stud_os.db`; stopped and relaunched and
+    confirmed existing data survives (the "only seed if missing" guard
+    works); launched a second instance while one was running and
+    confirmed it detects the conflict instead of erroring. Also
+    generated an original SVG icon (open notebook + knowledge-graph
+    motif) -- the first attempt got corrupted by a `write_file` call
+    (silently garbled to 6 bytes of binary garbage), caught by checking
+    the output before trusting it rather than assuming the write
+    succeeded, fixed by rewriting via a shell heredoc instead -- now
+    flagged in §6 for future sessions, since it wasn't written down
+    anywhere in this file before. Committed, pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -490,7 +552,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (102 tests), isolated temp-DB fixture
+  tests/                 pytest suite (104 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -505,6 +567,11 @@ frontend/src/
   App.tsx                 route-level code splitting via React.lazy
 ```
 
+packaging/appimage/    build.sh, AppRun, .desktop, icon -- see §4
+                        session 12 and README's "Packaged desktop app"
+                        section. Output binary is gitignored, not
+                        committed; .cache/ (appimagetool download) too.
+
 Shared/reusable pieces worth knowing about before rebuilding something
 that already exists: `components/shared/Modal.tsx`, `DropdownMenu.tsx`,
 `WikiLinkText.tsx` (markdown + wiki-link rendering, used by both Notes
@@ -513,6 +580,18 @@ and Journal).
 ---
 
 ## 6. Environment quirks (save yourself time)
+
+- **`desktop-commander:write_file` can silently corrupt binary/text
+  content it doesn't like** — writing an SVG icon (session 12, §4) once
+  produced a file that was supposed to be ~1KB of readable SVG markup
+  but was actually 6 bytes of garbled binary, with no error reported.
+  Don't trust a write succeeded just because the tool call returned
+  cleanly, especially for anything binary-ish (images, icons) — verify
+  the actual file content afterward (`head -c`, `file`, or an image
+  view) before building on it. When a write matters and something
+  outside plain UTF-8 text is involved, writing via a shell heredoc
+  (`cat > file << 'EOF' ... EOF` through `start_process`) has been more
+  reliable than `write_file` directly.
 
 - **Desktop Commander (the tool used for shell/file access to this real
   machine) has periodic connection instability** — tool calls sometimes
@@ -616,9 +695,26 @@ deliberate for small personal corpora, not an oversight — if it ever
 becomes a real annoyance in practice, that's a "confirm with the user
 first" conversation, not a unilateral fix.
 
+**Packaging (session 12, §4) is done and live-verified**: the app ships
+as a real, working, self-contained AppImage
+(`./packaging/appimage/build.sh` → `Stud-OS-x86_64.AppImage`), one
+process/port, no manual setup on first launch. Not yet done: no macOS or
+Windows packaging (Linux-only for now, matching this machine), and the
+built binary isn't attached anywhere yet -- distribution is via GitHub
+Releases once the app is actually tagged (see the still-open license/
+version-tag decision below).
+
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
-at it live yourself (boot both servers, seed realistic data, click
-through it, don't just read the code), verify with pixel math or actual
-interaction if it's a layout complaint, fix, re-verify, test, commit,
-push, confirm CI green.
+at it live yourself -- either the normal two-server dev setup or the
+packaged AppImage, whichever fits what's being checked -- seed realistic
+data, click through it, don't just read the code, verify with pixel math
+or actual interaction if it's a layout complaint, fix, re-verify, test,
+commit, push, confirm CI green.
+
+**Still an open decision, not a task left undone:** shipping this as an
+actual "v1.0" (vs. just being ready to) needs the user to pick a
+LICENSE (none exists yet -- a real gap for something going open-source)
+and a version tag (`package.json` still says `0.0.0`, no git tag exists).
+Both are two-minute tasks once the license choice is made; don't guess
+at a license unprompted.
