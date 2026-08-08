@@ -30,6 +30,10 @@ one port — FastAPI serves the built frontend itself, no separate
 frontend server, no manual migrations. `./packaging/appimage/build.sh`
 → `Stud-OS-x86_64.AppImage`. See README's "Packaged desktop app" section.
 
+**API keys can be entered directly in Settings now (session 13, §4)** —
+no more required manual `.env` editing, though it still works if you
+prefer it. Keys still never touch the database, only `.env`.
+
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
 hardcoded secrets, provider abstraction so contributors/users bring
@@ -60,7 +64,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 104 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 111 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -515,6 +519,44 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     succeeded, fixed by rewriting via a shell heredoc instead -- now
     flagged in §6 for future sessions, since it wasn't written down
     anywhere in this file before. Committed, pushed, CI green.
+13. **API keys directly from Settings, no more manual .env editing.**
+    User found the real usability gap this created: Settings could pick
+    which provider a feature uses, but the key itself still needed a
+    text editor and a restart. Opened by actually noticing the packaged
+    AppImage was running live in the user's browser (AppImageLauncher +
+    a real Chrome tab) -- stopped it cleanly for dev work rather than
+    just killing things blindly, since real usage was happening. Added
+    `PUT /api/ai/providers/{key}/key`: writes into `.env`, deliberately
+    still never into the database -- same boundary the provider system
+    has had since Phase 2, just a friendlier way to reach it. Tested
+    python-dotenv's own auto-discovery directly against this repo before
+    trusting it and it came back empty even from the repo root, so
+    `backend/ai/env_file.py` resolves the `.env` path explicitly instead
+    (`ENV_FILE_PATH` override, else repo root) -- same "don't trust
+    ambient discovery" reasoning as `session.py`'s DB path, and it
+    mirrors how `DATABASE_URL` already works for the packaged app.
+    `AppRun` updated to set `ENV_FILE_PATH` to the writable data dir,
+    since keys entered through the packaged app can't write into the
+    read-only AppImage tree. Settings page restructured into a
+    "Providers" section (the new key fields, or a plain status line for
+    Ollama/LM Studio, which don't take one) above the existing
+    "Features" picker. 7 new tests -- every one explicitly points
+    `ENV_FILE_PATH` at a `tmp_path` file via monkeypatch *before*
+    touching anything, specifically so nothing in the suite can ever
+    write to the real repo `.env`; checked by hand before and after the
+    full run that it hadn't, not just assumed the isolation held. Suite
+    at 111/111. Live-verified in a real browser against the real dev
+    backend: typed a real-shaped key into Anthropic's field, watched
+    "Configured" appear and the feature dropdowns unlock with no reload,
+    confirmed the key actually landed in the real `.env` on disk,
+    selected it for a feature and confirmed that persisted too, then
+    clicked "Remove" and confirmed the key was cleared from disk and
+    `configured` flipped back to `false`. Test key and the `.env` file
+    it created were deleted afterward. **The packaged AppImage from
+    session 12 was built before this change** -- it still only supports
+    manual `.env` editing (inside its own data dir) until rebuilt; not
+    done automatically since the user didn't ask for a rebuild this
+    session, just the underlying feature. Committed, pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -552,7 +594,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (104 tests), isolated temp-DB fixture
+  tests/                 pytest suite (111 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -702,7 +744,16 @@ process/port, no manual setup on first launch. Not yet done: no macOS or
 Windows packaging (Linux-only for now, matching this machine), and the
 built binary isn't attached anywhere yet -- distribution is via GitHub
 Releases once the app is actually tagged (see the still-open license/
-version-tag decision below).
+version-tag decision below). **The AppImage currently sitting in the
+repo root (if one still is) predates session 13's API-key-from-Settings
+feature** -- it'll still run fine, just without that convenience inside
+the packaged app until `build.sh` is re-run.
+
+**Settings can now do everything through the UI (session 13, §4)**: pick
+a provider per feature, *and* paste/replace/remove that provider's key,
+all without touching `.env` by hand. `.env` editing still works exactly
+as before for anyone who prefers it -- this only added an alternative,
+it didn't remove the old path.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
