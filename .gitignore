@@ -29,3 +29,9 @@ backend/uploads/
 
 # Alembic pycache
 backend/alembic/versions/__pycache__/
+
+# Packaged AppImage build output/cache -- built locally via
+# packaging/appimage/build.sh, distributed via GitHub Releases, not
+# committed (it's a large generated binary, not source)
+packaging/appimage/.cache/
+Stud-OS-x86_64.AppImage

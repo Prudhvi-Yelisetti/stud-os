@@ -1,0 +1,98 @@
+#!/bin/bash
+# AppRun -- Stud-OS launcher.
+#
+# One process, one port: FastAPI serves both the API and the built
+# React app (see the FRONTEND_DIST block in backend/main.py). This is
+# simpler than a split frontend/backend-process setup and needs no
+# build-time URL baking, because the frontend already calls relative
+# "/api/..." paths -- same-origin by construction.
+#
+# AI features (task suggestions, study coach, ask-your-notes) are
+# entirely optional and per-feature opt-in via Settings -- this script
+# does not start or require Ollama, LM Studio, or any hosted provider.
+# Semantic search works out of the box with no setup either way (it's a
+# local embedding model, not an API call).
+#
+# AppImages mount read-only (a FUSE-mounted squashfs at a fresh path
+# each run), so the SQLite DB and logs live in a real, writable
+# directory under $HOME instead -- nothing here can write inside $HERE.
+
+set -u
+
+# $APPDIR is set by the AppImage runtime when actually run as a .AppImage.
+# Fall back to resolving our own location so this also works if someone
+# runs AppRun directly out of the AppDir during testing.
+if [ -n "${APPDIR:-}" ]; then
+    HERE="$APPDIR"
+else
+    HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+fi
+
+DATA_DIR="$HOME/.local/share/Stud-OS"
+PYTHON="$HERE/usr/venv/bin/python3"
+PORT=8420
+
+mkdir -p "$DATA_DIR"
+
+# ---- seed the DB on first run only -- never overwrite existing data ----
+if [ ! -f "$DATA_DIR/stud_os.db" ]; then
+    cp "$HERE/usr/seed.db" "$DATA_DIR/stud_os.db"
+    echo "Stud-OS: created a new database at $DATA_DIR/stud_os.db"
+fi
+
+# ---- port sanity check ----
+# 8420 was chosen (see README/HANDOFF) specifically to avoid the 8000
+# range other local projects on this machine use. If something's
+# already answering here, assume it's a previous Stud-OS instance
+# rather than silently trying another port -- same reasoning as dev's
+# "check for stale processes first" habit, just applied to a packaged
+# app instead of `ps aux`.
+if command -v curl >/dev/null 2>&1 && curl -s -o /dev/null "http://127.0.0.1:$PORT/api/health"; then
+    echo "Stud-OS: something is already answering on port $PORT."
+    echo "         If that's a previous Stud-OS instance, this one will just open a browser tab at it."
+    echo "         If it's something else, stop it first and relaunch."
+else
+    echo "Stud-OS: starting on port $PORT..."
+    # exec matters here: without it, this subshell forks uvicorn as ITS
+    # OWN child and $! captures the subshell's PID, not uvicorn's, which
+    # would leave uvicorn orphaned (still running) after `kill "$APP_PID"`
+    # on shutdown -- exec replaces the subshell's process image with
+    # uvicorn directly instead.
+    #
+    # --app-dir points at usr/app (NOT usr/app/backend): Stud-OS imports
+    # itself as the "backend" package (`from backend.database import
+    # ...`, etc, same as in dev where the repo root is on sys.path), so
+    # the importable root has to be one level above the backend/ folder
+    # itself, unlike a flat main.py layout.
+    (cd "$DATA_DIR" && \
+        DATABASE_URL="sqlite:///$DATA_DIR/stud_os.db" \
+        FRONTEND_DIST="$HERE/usr/frontend-build" \
+        exec "$PYTHON" -m uvicorn backend.main:app \
+            --app-dir "$HERE/usr/app" \
+            --host 127.0.0.1 --port "$PORT" \
+            > "$DATA_DIR/backend.log" 2>&1) &
+    APP_PID=$!
+
+    for _ in $(seq 1 30); do
+        curl -s -o /dev/null "http://127.0.0.1:$PORT/api/health" && break
+        sleep 1
+    done
+fi
+
+cleanup() {
+    echo ""
+    echo "Stud-OS: shutting down..."
+    [ -n "${APP_PID:-}" ] && kill "$APP_PID" 2>/dev/null
+}
+trap cleanup EXIT INT TERM
+
+echo "Stud-OS: ready at http://127.0.0.1:$PORT"
+if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "http://127.0.0.1:$PORT" >/dev/null 2>&1 &
+else
+    echo "         (open that URL manually -- xdg-open isn't available)"
+fi
+echo "Stud-OS: logs in $DATA_DIR/backend.log"
+echo "Stud-OS: press Ctrl+C here to stop it."
+
+wait

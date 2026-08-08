@@ -50,15 +50,14 @@ plan (now a historical record — see its closing note).
 
 ## Running locally
 
+Run everything from the **repo root** — `backend` is imported as a
+package (`from backend.database import ...`), so it needs to be on the
+path from one level up, not run from inside `backend/`.
+
 ### Backend (FastAPI)
 ```bash
-cd backend
-../.venv/bin/python -m alembic -c alembic.ini upgrade head   # from repo root instead: alembic -c backend/alembic.ini upgrade head
-../.venv/bin/python -m uvicorn backend.main:app --reload --port 8420
-```
-Run alembic commands from the **repo root**, not `backend/`:
-```bash
 .venv/bin/python -m alembic -c backend/alembic.ini upgrade head
+.venv/bin/python -m uvicorn backend.main:app --reload --port 8420
 ```
 
 ### Frontend (Vite + React)
@@ -70,6 +69,29 @@ npm run dev
 Visit http://localhost:5173 — the dev server proxies `/api` to the
 backend on port 8420. (Not 8000 — that's used by other projects on this
 machine; see vite.config.ts if you ever need to change it again.)
+
+## Packaged desktop app (Linux)
+
+For everyday use without manually running `npm run dev` / `uvicorn`
+every time, build a self-contained AppImage:
+```bash
+./packaging/appimage/build.sh
+```
+Produces `Stud-OS-x86_64.AppImage` in the repo root — one file, no
+install step. Double-click it (or run it from a terminal) and it opens
+your browser at the app; `Ctrl+C` in that terminal (or closing the
+window it opened from) stops it.
+
+What this bundles: backend + a self-contained Python venv + the built
+frontend, all served from one FastAPI process on port 8420 — no
+separate frontend dev server, no manual migrations. What it does *not*
+bundle: any AI provider key, or Ollama/LM Studio themselves (see
+"AI features" below) — those stay exactly as optional as they are in
+dev, configured per-feature in Settings after first launch.
+
+Your data lives in `~/.local/share/Stud-OS/stud_os.db`, untouched by
+re-running the build or updating to a new AppImage — it's created once,
+on first launch, outside the (read-only) AppImage itself.
 
 ## Testing
 

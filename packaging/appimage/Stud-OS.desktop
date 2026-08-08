@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Stud-OS
+Comment=Personal knowledge, productivity, and AI operating system
+Exec=AppRun
+Icon=stud-os
+Categories=Utility;Office;
+Terminal=true
