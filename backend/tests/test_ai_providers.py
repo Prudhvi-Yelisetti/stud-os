@@ -67,7 +67,10 @@ def test_local_provider_respects_base_url_override(monkeypatch):
 
 def test_settings_default_is_unconfigured(client):
     resp = client.get("/api/ai/settings/suggestions").json()
-    assert resp == {"feature": "suggestions", "provider_key": None, "model_override": None}
+    assert resp == {
+        "feature": "suggestions", "provider_key": None, "model_override": None,
+        "effective_provider_key": None,  # no per-feature override AND no global default set
+    }
 
 
 def test_settings_rejects_provider_with_no_key_set(client):
@@ -90,6 +93,95 @@ def test_settings_can_be_cleared(client, monkeypatch):
     client.put("/api/ai/settings/suggestions", json={"provider_key": "anthropic"})
     resp = client.put("/api/ai/settings/suggestions", json={"provider_key": None})
     assert resp.json()["provider_key"] is None
+
+
+def test_feature_without_override_inherits_the_global_default(client, monkeypatch):
+    """'default' is just another AISettings row (feature='default') --
+    setting it should make an otherwise-untouched feature report that
+    provider as its effective_provider_key, without ever writing
+    anything into that feature's own row."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    client.put("/api/ai/settings/default", json={"provider_key": "anthropic"})
+
+    resp = client.get("/api/ai/settings/suggestions").json()
+    assert resp["provider_key"] is None  # no explicit override was ever set
+    assert resp["effective_provider_key"] == "anthropic"  # inherited from default
+
+
+def test_feature_override_wins_over_the_global_default(client, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    client.put("/api/ai/settings/default", json={"provider_key": "anthropic"})
+    client.put("/api/ai/settings/study", json={"provider_key": "gemini"})
+
+    study = client.get("/api/ai/settings/study").json()
+    assert study["provider_key"] == "gemini"
+    assert study["effective_provider_key"] == "gemini"
+
+    # A feature that never set its own override still inherits the default.
+    ask = client.get("/api/ai/settings/ask").json()
+    assert ask["provider_key"] is None
+    assert ask["effective_provider_key"] == "anthropic"
+
+
+def test_changing_the_default_updates_features_that_never_overrode_it(client, monkeypatch):
+    """Confirms the fallback is resolved live at read time, not snapshotted
+    when the default was first set -- a feature that inherits should track
+    later changes to the default automatically."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    client.put("/api/ai/settings/default", json={"provider_key": "anthropic"})
+    assert client.get("/api/ai/settings/suggestions").json()["effective_provider_key"] == "anthropic"
+
+    client.put("/api/ai/settings/default", json={"provider_key": "gemini"})
+    assert client.get("/api/ai/settings/suggestions").json()["effective_provider_key"] == "gemini"
+
+
+def test_removing_a_key_falls_through_instead_of_resolving_to_a_dead_provider(client, monkeypatch):
+    """Real bug caught during live testing: Settings' 'Remove' button
+    clears a provider's key from .env, but nothing clears the stored
+    provider_key on any AISettings row that named it -- an override or
+    default naming a now-unconfigured provider must fall through to the
+    next thing (default, then None), not be reported as the effective
+    provider and fail at call time."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("OLLAMA_MODEL", "llama3.1")  # doesn't matter, ollama never needs a key
+    client.put("/api/ai/settings/default", json={"provider_key": "anthropic"})
+    client.put("/api/ai/settings/study", json={"provider_key": "ollama"})
+
+    # Remove the key -- same as clicking "Remove" in Settings.
+    client.put("/api/ai/providers/anthropic/key", json={"api_key": ""})
+
+    default_row = client.get("/api/ai/settings/default").json()
+    assert default_row["provider_key"] == "anthropic"  # still stored...
+    assert default_row["effective_provider_key"] is None  # ...but not usable anymore
+
+    suggestions = client.get("/api/ai/settings/suggestions").json()
+    assert suggestions["effective_provider_key"] is None  # inherited a dead default -> None, not "anthropic"
+
+    # A feature with its own override to a DIFFERENT, still-configured
+    # provider is unaffected by the dead default.
+    study = client.get("/api/ai/settings/study").json()
+    assert study["effective_provider_key"] == "ollama"
+
+
+def test_task_suggestions_uses_the_global_default_when_no_override_set(client, monkeypatch):
+    """The actual usage endpoint (not just GET /settings) has to resolve
+    the default too -- this is the part that would have silently kept
+    calling nothing if _resolve_provider() weren't wired into it."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    client.put("/api/ai/settings/default", json={"provider_key": "anthropic"})
+    client.post("/api/tasks", json={"title": "Write the docs"})
+
+    def fake_chat(self, messages, system=None, max_tokens=None):
+        return "Focus on writing the docs."
+
+    monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
+
+    resp = client.get("/api/ai/suggestions/tasks").json()
+    assert resp["configured"] is True
+    assert resp["suggestion"] == "Focus on writing the docs."
 
 
 def test_related_notes_excludes_self_and_ranks_by_relevance(client):

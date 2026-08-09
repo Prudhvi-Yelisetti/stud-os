@@ -27,6 +27,37 @@ from backend.ai.env_file import upsert_key
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
+# "default" is stored as an AISettings row exactly like any real feature
+# (suggestions/study/ask) -- reusing the existing table rather than adding
+# a new one. Its own provider_key IS the global default; it has no further
+# fallback of its own (see _resolve_provider).
+DEFAULT_FEATURE = "default"
+
+
+def _resolve_provider(db: Session, feature: str) -> str | None:
+    """A feature's effective provider: its own explicit override if one is
+    set AND still actually configured, else the global default (same
+    condition), else None. This is what "add a global default, but let
+    each feature override it if wanted" actually means at read time -- a
+    feature with no explicit choice isn't "unconfigured", it just inherits
+    whatever the default is right now, and picks up any later change to
+    that default automatically.
+
+    The is_configured() checks matter for a real, not-just-theoretical
+    case: a provider's key can be removed (Settings' "Remove" button)
+    without anything clearing the stored provider_key that pointed at it
+    -- an override or default naming a now-unconfigured provider should
+    fall through, not be reported as usable and fail at call time."""
+    row = db.query(AISettings).filter(AISettings.feature == feature).first()
+    if row and row.provider_key and is_configured(row.provider_key):
+        return row.provider_key
+    if feature == DEFAULT_FEATURE:
+        return None
+    default_row = db.query(AISettings).filter(AISettings.feature == DEFAULT_FEATURE).first()
+    if default_row and default_row.provider_key and is_configured(default_row.provider_key):
+        return default_row.provider_key
+    return None
+
 
 class ProviderStatus(BaseModel):
     key: str
@@ -44,8 +75,9 @@ class ProviderKeyIn(BaseModel):
 
 class AISettingsOut(BaseModel):
     feature: str
-    provider_key: str | None
+    provider_key: str | None  # explicit override for this feature; None = inherits the default
     model_override: str | None
+    effective_provider_key: str | None = None  # override if set, else the global default, else None
 
 
 class AISettingsUpdate(BaseModel):
@@ -131,9 +163,12 @@ def set_provider_key(provider_key: str, payload: ProviderKeyIn):
 @router.get("/settings/{feature}", response_model=AISettingsOut)
 def get_settings(feature: str, db: Session = Depends(get_db)):
     row = db.query(AISettings).filter(AISettings.feature == feature).first()
-    if row is None:
-        return AISettingsOut(feature=feature, provider_key=None, model_override=None)
-    return row
+    provider_key = row.provider_key if row else None
+    model_override = row.model_override if row else None
+    return AISettingsOut(
+        feature=feature, provider_key=provider_key, model_override=model_override,
+        effective_provider_key=_resolve_provider(db, feature),
+    )
 
 
 @router.put("/settings/{feature}", response_model=AISettingsOut)
@@ -153,7 +188,10 @@ def update_settings(feature: str, payload: AISettingsUpdate, db: Session = Depen
     row.model_override = payload.model_override
     db.commit()
     db.refresh(row)
-    return row
+    return AISettingsOut(
+        feature=row.feature, provider_key=row.provider_key, model_override=row.model_override,
+        effective_provider_key=_resolve_provider(db, feature),
+    )
 
 
 @router.get("/suggestions/related/{chapter_id}", response_model=list[RelatedNoteOut])
@@ -204,11 +242,11 @@ def related_notes(
 
 @router.get("/suggestions/tasks", response_model=TaskSuggestionsOut)
 def task_suggestions(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Asks the configured provider what to work on next, given open
-    tasks. Returns configured=False (not an error) if the 'suggestions'
-    feature has no provider set yet."""
-    settings_row = db.query(AISettings).filter(AISettings.feature == "suggestions").first()
-    if settings_row is None or not settings_row.provider_key:
+    """Asks the effective provider (this feature's own override, else the
+    global default) what to work on next, given open tasks. Returns
+    configured=False (not an error) if nothing resolves at all."""
+    provider_key = _resolve_provider(db, "suggestions")
+    if not provider_key:
         return TaskSuggestionsOut(configured=False)
 
     open_tasks = (
@@ -233,7 +271,7 @@ def task_suggestions(db: Session = Depends(get_db), user: User = Depends(get_cur
     )
 
     try:
-        provider = get_provider(settings_row.provider_key)
+        provider = get_provider(provider_key)
         reply = provider.chat(
             messages=[{"role": "user", "content": prompt}],
             system="You are a concise, practical productivity assistant inside a personal task manager.",
@@ -249,13 +287,13 @@ def generate_quiz(
     chapter_id: str, count: int = 5, db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ):
     """Generates a multiple-choice quiz from a chapter's content via the
-    'study' feature's configured provider. The correct answer and
-    explanation are included in the response -- this is a single-user
-    local app with no adversarial client, so there's no reason to pay
-    for a second round trip just to grade an answer the frontend can
-    check itself."""
-    settings_row = db.query(AISettings).filter(AISettings.feature == "study").first()
-    if settings_row is None or not settings_row.provider_key:
+    'study' feature's effective provider (its own override, else the
+    global default). The correct answer and explanation are included in
+    the response -- this is a single-user local app with no adversarial
+    client, so there's no reason to pay for a second round trip just to
+    grade an answer the frontend can check itself."""
+    provider_key = _resolve_provider(db, "study")
+    if not provider_key:
         return QuizOut(configured=False)
 
     chapter = (
@@ -279,7 +317,7 @@ def generate_quiz(
     )
 
     try:
-        provider = get_provider(settings_row.provider_key)
+        provider = get_provider(provider_key)
         reply = provider.chat(
             messages=[{"role": "user", "content": prompt}],
             system="You are a study-quiz generator. You only ever respond with raw JSON, never prose.",
@@ -308,11 +346,12 @@ def generate_quiz(
 def ask_notes(payload: AskIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Retrieval-augmented chat over the user's own notes and journal.
     Retrieval always uses local embeddings (Phase 1, free); generation
-    goes through the 'ask' feature's configured provider. Stateless --
-    the frontend holds and resends the full message history each turn,
-    same as any ordinary chat client; nothing is persisted server-side."""
-    settings_row = db.query(AISettings).filter(AISettings.feature == "ask").first()
-    if settings_row is None or not settings_row.provider_key:
+    goes through the 'ask' feature's effective provider (its own
+    override, else the global default). Stateless -- the frontend holds
+    and resends the full message history each turn, same as any ordinary
+    chat client; nothing is persisted server-side."""
+    provider_key = _resolve_provider(db, "ask")
+    if not provider_key:
         return AskOut(configured=False)
 
     if not payload.messages or payload.messages[-1].role != "user":
@@ -371,7 +410,7 @@ def ask_notes(payload: AskIn, db: Session = Depends(get_db), user: User = Depend
     history = [m.model_dump() for m in payload.messages[-8:]]
 
     try:
-        provider = get_provider(settings_row.provider_key)
+        provider = get_provider(provider_key)
         reply = provider.chat(messages=history, system=system)
     except ProviderError as e:
         raise HTTPException(status_code=502, detail=str(e))

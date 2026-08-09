@@ -146,8 +146,9 @@ export interface AIProviderStatus {
 
 export interface AISettings {
   feature: string
-  provider_key: string | null
+  provider_key: string | null // explicit override for this feature; null = inherits the global default
   model_override: string | null
+  effective_provider_key: string | null // override if set, else the global default, else null
 }
 
 export interface RelatedNote {

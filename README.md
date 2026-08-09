@@ -130,12 +130,15 @@ cp .env.example .env
 # fill in whichever provider(s) you want, e.g. ANTHROPIC_API_KEY=...
 ```
 
-Then pick a provider per feature in **Settings** — each feature can use
-a different provider, or none at all ("not configured" is a normal,
-expected state, not an error). Supported: Anthropic, Gemini, OpenAI,
-OpenRouter, Groq, NVIDIA NIM, DeepSeek, Mistral AI, xAI (Grok),
-Perplexity (Sonar), Ollama, LM Studio. See `.env.example` for the exact
-env var names and optional model overrides.
+Then, in **Settings**, connect a provider (paste its key, or nothing to
+do for Ollama/LM Studio) and set one as your **default** — every
+chat-based feature uses that default automatically. Any feature can
+still be pointed at a different connected provider individually if you
+want one thing (say, a paid model for study quizzes) to differ from the
+rest. Supported: Anthropic, Gemini, OpenAI, OpenRouter, Groq, NVIDIA NIM,
+DeepSeek, Mistral AI, xAI (Grok), Perplexity (Sonar), Ollama, LM Studio.
+See `.env.example` for the exact env var names and optional model
+overrides, if you'd rather edit `.env` directly than use Settings.
 
 Ollama and LM Studio run entirely on your own machine — no API key,
 no per-request cost, no data leaving your computer. Install either one,
