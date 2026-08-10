@@ -34,6 +34,11 @@ frontend server, no manual migrations. `./packaging/appimage/build.sh`
 no more required manual `.env` editing, though it still works if you
 prefer it. Keys still never touch the database, only `.env`.
 
+**Provider Settings redesigned (session 14, §4):** an Add-API-key form
+(provider select + key input + Connect), a global default provider used
+by every feature, and per-feature override if wanted — replaces the old
+"one row per provider" layout.
+
 **Going open-source, not just personal use.** Decided in the AI-layer
 conversation (§7) — this shapes design choices going forward: no
 hardcoded secrets, provider abstraction so contributors/users bring
@@ -64,7 +69,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 111 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 116 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -557,6 +562,57 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     manual `.env` editing (inside its own data dir) until rebuilt; not
     done automatically since the user didn't ask for a rebuild this
     session, just the underlying feature. Committed, pushed, CI green.
+14. **Rebuilt the AppImage, then redesigned provider Settings from
+    scratch.** Two parts. First, closed out session 13's flagged
+    staleness: user asked to rebuild -- noticed a leftover dev `vite`
+    process still running from earlier testing and killed it first
+    (build.sh also runs `npm run build` in that same directory), then
+    re-ran `build.sh` (much faster than session 12's first run, pip's
+    cache from before was still warm) and relaunched, confirming
+    existing data survived and the new key-entry UI was actually present
+    in the rebuilt binary. Second, and the bulk of the session: the user
+    found the previous "show a row for all 12 providers" Settings layout
+    genuinely wrong for how they wanted to use it -- wanted an
+    "Add API key" button revealing a provider-select + key-input +
+    Connect form instead, a list of only *connected* providers, and a
+    global default with per-feature override. Asked one clarifying
+    question before building anything (what "set one active" should
+    actually mean, given the app already had per-feature pickers) rather
+    than guessing at a data-model decision -- user picked "global
+    default, features can still override." That answer mapped cleanly
+    onto the existing schema with zero migrations: `"default"` is just
+    another `AISettings` row, same table `suggestions`/`study`/`ask`
+    already used. New `_resolve_provider(db, feature)` helper (a
+    feature's own override if set, else the default, else nothing) got
+    wired into the three *usage* endpoints, not just the settings
+    GET/PUT -- resolving the default only at the settings layer while
+    the actual task-suggestions/quiz/ask endpoints kept reading the raw
+    per-feature `provider_key` directly would have left the feature
+    silently broken exactly where it mattered. Found a real bug while
+    live-testing the removal flow, not from reading the code: removing a
+    key clears it from `.env` but nothing clears an `AISettings` row
+    (default or override) that still names that provider, so
+    `effective_provider_key` kept reporting a now-dead provider instead
+    of falling through -- fixed by having the resolver check
+    `is_configured()` at every step, not just whether a `provider_key`
+    string exists, with a dedicated regression test
+    (`test_removing_a_key_falls_through_instead_of_resolving_to_a_dead_provider`).
+    Settings page rebuilt: `ProvidersSection` (connected list + inline
+    Add-API-key form, each row's Edit/Remove/Set-as-default) sits above
+    the existing `FeatureProviderPicker`s, which now show
+    "Use default (X)" as their leading option instead of "Not
+    configured". 6 new backend tests, suite at 116/116. Frontend
+    typechecks and builds clean. Live-verified in a real browser against
+    the real dev backend, start to finish: connected a key through the
+    new form, set it default, watched all three feature dropdowns update
+    live with no reload, explicitly overrode one feature and confirmed
+    the others still inherited, then edited and removed the key and
+    watched the UI fall back cleanly (no orphaned dropdown value, no
+    crash) -- which is exactly what surfaced the dead-provider bug
+    above. **AppImage not rebuilt again after this second round of
+    changes** -- the one relaunched earlier in this session now predates
+    the provider-settings redesign; rebuild before relying on the
+    packaged app reflecting it. Committed, pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -594,7 +650,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (111 tests), isolated temp-DB fixture
+  tests/                 pytest suite (116 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -745,15 +801,20 @@ Windows packaging (Linux-only for now, matching this machine), and the
 built binary isn't attached anywhere yet -- distribution is via GitHub
 Releases once the app is actually tagged (see the still-open license/
 version-tag decision below). **The AppImage currently sitting in the
-repo root (if one still is) predates session 13's API-key-from-Settings
-feature** -- it'll still run fine, just without that convenience inside
-the packaged app until `build.sh` is re-run.
+repo root (if one still is) predates session 14's provider-settings
+redesign** (it was rebuilt mid-session-14 for session 13's feature, but
+not rebuilt again after) -- it'll still run fine on the old Settings
+layout, just without the Add-API-key-form/global-default/override UI
+until `build.sh` is re-run.
 
-**Settings can now do everything through the UI (session 13, §4)**: pick
-a provider per feature, *and* paste/replace/remove that provider's key,
-all without touching `.env` by hand. `.env` editing still works exactly
-as before for anyone who prefers it -- this only added an alternative,
-it didn't remove the old path.
+**Settings can now do everything through the UI (sessions 13 and 14,
+§4)**: connect a provider by pasting its key through an Add-API-key
+form (no more manual `.env` editing required, though it still works if
+preferred), set one connected provider as the global default, and
+override that default per feature if wanted. Keys still never touch the
+database, only `.env` -- session 14 only changed how the *choice* of
+which provider each feature effectively uses gets resolved and
+displayed, not where secrets live.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
