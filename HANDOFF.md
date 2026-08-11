@@ -69,7 +69,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 116 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 120 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -613,6 +613,35 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     changes** -- the one relaunched earlier in this session now predates
     the provider-settings redesign; rebuild before relying on the
     packaged app reflecting it. Committed, pushed, CI green.
+15. **Found and fixed a real, silent storage-leak bug: orphaned
+    attachments on permanent delete.** User asked to work on "a new
+    feature or bug" without naming one -- scoped it by auditing routers
+    that hadn't had a close look in recent sessions (Tasks, Notes,
+    Journal, Search, Trash), since the last several sessions were all
+    AI-layer work. Found it by reading `trash.py`'s `permanently_delete`
+    carefully: `Attachment` is polymorphic (`owner_type`/`owner_id`),
+    exactly like `Chunk` -- no ORM foreign key, nothing cascades
+    automatically. Chunk cleanup was already correctly wired in;
+    attachment cleanup simply wasn't, for any of the three owner types
+    that can have attachments (chapter, journal, project) or for a
+    notebook's cascaded chapters. Meant every permanently-deleted item
+    with a file attached left that file on disk forever and its DB row
+    permanently orphaned -- a real, silent, unbounded storage leak, not
+    a hypothetical. Followed the "confirm the bug is real before fixing
+    it" discipline properly: wrote 4 failing regression tests first
+    (one per owner type), ran them against the *unpatched* code and
+    watched them actually fail with real orphaned files in a `tmp_path`,
+    only then fixed it -- new `delete_attachments_for()` in
+    `routers/attachments.py` (same shape as the existing
+    `delete_chunks_for`), wired into `trash.py` for all four cases.
+    120/120 backend tests pass (4 new). Also verified end-to-end against
+    the **real filesystem**, not just the test suite -- uploaded a real
+    file to `backend/uploads/` through a live server, permanently
+    deleted its chapter through the real API, confirmed the directory
+    was completely empty afterward. Committed, pushed, CI green.
+    **AppImage still not rebuilt** (now two sessions behind -- missing
+    both session 14's Settings redesign and this fix); user explicitly
+    asked to hold off on rebuilding until later.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -650,7 +679,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (116 tests), isolated temp-DB fixture
+  tests/                 pytest suite (120 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -801,11 +830,12 @@ Windows packaging (Linux-only for now, matching this machine), and the
 built binary isn't attached anywhere yet -- distribution is via GitHub
 Releases once the app is actually tagged (see the still-open license/
 version-tag decision below). **The AppImage currently sitting in the
-repo root (if one still is) predates session 14's provider-settings
-redesign** (it was rebuilt mid-session-14 for session 13's feature, but
-not rebuilt again after) -- it'll still run fine on the old Settings
-layout, just without the Add-API-key-form/global-default/override UI
-until `build.sh` is re-run.
+repo root (if one still is) is now two sessions stale** -- it predates
+both session 14's provider-settings redesign and session 15's
+attachment-leak fix. The user was explicitly asked and said not to
+rebuild yet (session 15) -- don't rebuild unprompted, just be aware
+"the packaged app" and "what the code actually does" have diverged
+until someone asks for a rebuild.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
@@ -815,6 +845,17 @@ override that default per feature if wanted. Keys still never touch the
 database, only `.env` -- session 14 only changed how the *choice* of
 which provider each feature effectively uses gets resolved and
 displayed, not where secrets live.
+
+**A real bug got fixed outside the AI layer for the first time in a
+while (session 15, §4):** permanently deleting a chapter, notebook,
+journal entry, or project with an attached file used to leave the file
+on disk and its DB row orphaned forever. Fixed; see `delete_attachments_for`
+in `routers/attachments.py`. Worth remembering the *pattern* here more
+than the specific fix: `Attachment` and `Chunk` are both polymorphic
+(`owner_type`/`owner_id` or `parent_type`/`parent_id`), so anything else
+built the same way in the future needs the same explicit cleanup on
+permanent delete -- it will not cascade automatically just because a
+"real" model like Chapter or Notebook does.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
