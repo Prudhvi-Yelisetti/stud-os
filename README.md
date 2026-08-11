@@ -41,8 +41,9 @@ All of V1 from the vision doc is built, tested, and in daily-usable shape:
 
 **Not built, deliberately deferred:** real auth — it's a single hardcoded
 local user, fine for personal use, would need work before ever being
-multi-user or internet-facing. The project is going open-source, so this
-is a known, flagged limitation rather than an oversight.
+multi-user or internet-facing. The source is published for transparency
+and so anyone can self-host it, so this is a known, flagged limitation
+rather than an oversight.
 
 See `HANDOFF.md` for a full session-by-session history and current
 state, and `REBUILD_PLAN.md` for the original architecture/data-model
@@ -145,3 +146,11 @@ no per-request cost, no data leaving your computer. Install either one,
 load/pull a model, start its local server, and it shows up in Settings
 with no `.env` changes needed (override the model or base URL there only
 if you're not using the defaults — see `.env.example`).
+
+## License
+
+Source-available, not open source: you're free to use, run, and
+self-host this software for any purpose, but copying, redistributing,
+publishing, or creating derivative works from the source code requires
+prior written permission from the copyright holder. See `LICENSE` for
+the exact terms.

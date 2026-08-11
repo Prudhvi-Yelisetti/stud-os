@@ -1,0 +1,38 @@
+Stud-OS Source-Available License
+Copyright (c) 2026 Prudhvi Yelisetti. All rights reserved.
+
+1. Use and Self-Hosting
+   You may download, install, run, and self-host this software, in
+   unmodified or modified form, for any purpose -- personal, educational,
+   or commercial -- including on your own infrastructure or a machine
+   you control, free of charge.
+
+2. Restrictions
+   Except as expressly permitted in Section 1, you may not, without
+   prior written permission from the copyright holder:
+     a. copy, publish, distribute, sublicense, or otherwise make the
+        source code (in whole or in part) available to any third party;
+     b. create and distribute derivative works based on the source code;
+     c. use the name "Stud-OS" or the copyright holder's name to
+        endorse or promote any product without such permission.
+
+3. Modifications for Your Own Use
+   You may modify your own local copy for your own use under Section 1.
+   Any modified copy remains subject to this License and may not be
+   redistributed under the restrictions in Section 2.
+
+4. No Warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+   CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+   CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION
+   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+5. Requesting Permission
+   To request permission for uses beyond this License -- redistributing,
+   forking publicly, or publishing a derivative work, for example --
+   contact the copyright holder via the project's GitHub page.
+
+This is a custom license and is not an OSI-approved open source license.

@@ -44,7 +44,15 @@ conversation (§7) — this shapes design choices going forward: no
 hardcoded secrets, provider abstraction so contributors/users bring
 their own API keys, README should be written for someone else running
 this, not just Prudhvi. Auth is *not* in scope yet (deliberately kept
-single-user for now, see "What's NOT built").
+single-user for now, see "What's NOT built"). **Refined later (session
+16, §4): "open-source" turned out not to be quite the right word for
+what was actually wanted.** The license landed on is source-available,
+not open source — self-hosting and modifying your own copy are freely
+permitted, but copying/redistributing/publishing the source requires
+permission. Every design choice from this paragraph (no hardcoded
+secrets, BYOK, a README written for someone else running it) still
+holds exactly as before; only the legal framing around the source
+itself changed. See LICENSE and README's License section.
 
 ---
 
@@ -642,6 +650,41 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     **AppImage still not rebuilt** (now two sessions behind -- missing
     both session 14's Settings redesign and this fix); user explicitly
     asked to hold off on rebuilding until later.
+16. **Rebuilt the AppImage, then resolved the license and v1.0 version
+    tag.** User asked "is it a real productivity app, or anything
+    missing" -- answered honestly rather than just reassuring: yes, it's
+    real (verified via actual usage evidence throughout this file, not
+    just claims), but flagged real gaps -- no sync/mobile access, no
+    reminders/notifications, no calendar view, attachments only work on
+    Notes despite the backend allowing them on journal/project too, and
+    the still-open license/tag decision. User then asked to rebuild the
+    AppImage (closing out session 15's staleness -- confirmed the
+    rebuilt binary's data dir had no notebooks/tasks in it, and was
+    upfront that this wasn't data loss from the rebuild -- that database
+    file appears to have never actually held the earlier test content in
+    the first place, likely conflated with separate dev-server testing
+    in past sessions) and then move to licensing. For the license,
+    user's stated goal ("people can use it and self-host it freely, but
+    can't copy the code without permission") doesn't fit any standard
+    open-source license -- MIT/Apache/GPL all explicitly grant copying
+    and redistribution rights, just with different conditions. Flagged
+    this honestly (with the standard "not a lawyer" caveat) rather than
+    picking the closest standard license and calling it done, since it
+    would have meant either misleading the user about what rights they
+    were actually granting, or silently deciding for them that
+    "source-available" was close enough to what they asked for.
+    Landed on a custom source-available `LICENSE`: free to use, run, and
+    self-host (including modifying your own copy) for any purpose, but
+    copying/redistributing/publishing the source or its derivatives
+    needs permission -- not OSI-approved open source. Updated every
+    forward-facing "going open-source" reference in README and this
+    file's §1 to match (historical session-history entries elsewhere in
+    §4 describing what was decided *at the time* were deliberately left
+    alone -- they were accurate then; rewriting past decisions to match
+    a later refinement would falsify the history this file exists to
+    preserve). Bumped `frontend/package.json` and `main.py`'s FastAPI
+    `version=` to `1.0.0`, tagged `v1.0.0`, pushed the tag. Committed,
+    pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -865,9 +908,10 @@ data, click through it, don't just read the code, verify with pixel math
 or actual interaction if it's a layout complaint, fix, re-verify, test,
 commit, push, confirm CI green.
 
-**Still an open decision, not a task left undone:** shipping this as an
-actual "v1.0" (vs. just being ready to) needs the user to pick a
-LICENSE (none exists yet -- a real gap for something going open-source)
-and a version tag (`package.json` still says `0.0.0`, no git tag exists).
-Both are two-minute tasks once the license choice is made; don't guess
-at a license unprompted.
+**License and version tag: resolved (session 16, §4).** LICENSE exists
+now — source-available, not standard open source (see §1's updated
+note and README's License section). `package.json` and `main.py`'s
+FastAPI `version=` should be bumped to `1.0.0` and a `v1.0.0` git tag
+pushed as part of that same session — check §4's session 16 entry and
+`git tag -l` to confirm whether that actually landed, rather than
+assuming from this paragraph alone.

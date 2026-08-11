@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from backend.database import models  # noqa: F401 -- registers models on Base.metadata
 from backend.routers import notes, tasks, journal, gamification, projects, search, graph, attachments, trash, ai
 
-app = FastAPI(title="Stud-OS API", version="0.2.0")
+app = FastAPI(title="Stud-OS API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
