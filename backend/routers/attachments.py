@@ -19,6 +19,24 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_OWNER_TYPES = {"chapter", "project", "journal"}
 
 
+def delete_attachments_for(db: Session, *, owner_type: str, owner_id: str) -> None:
+    """Removes every attachment (DB row AND file on disk) belonging to one
+    owner. Attachment is polymorphic (owner_type/owner_id), same as Chunk
+    -- no ORM foreign key, so nothing cascades automatically. Callers that
+    permanently delete a chapter/journal entry/project (see routers/trash.py)
+    need to call this explicitly, the same way they already do for Chunk,
+    or the files and rows just become permanently orphaned."""
+    attachments = (
+        db.query(Attachment)
+        .filter(Attachment.owner_type == owner_type, Attachment.owner_id == owner_id)
+        .all()
+    )
+    for att in attachments:
+        if os.path.exists(att.stored_path):
+            os.remove(att.stored_path)
+        db.delete(att)
+
+
 @router.get("", response_model=list[AttachmentOut])
 def list_attachments(
     owner_type: str, owner_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
