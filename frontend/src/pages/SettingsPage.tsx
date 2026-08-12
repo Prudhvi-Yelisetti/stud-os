@@ -1,9 +1,21 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { aiApi } from '../lib/ai'
 import type { AIProviderStatus } from '../lib/api'
 
 const DEFAULT_FEATURE = 'default'
+
+// FastAPI's HTTPException(detail=...) is what verify()/set_provider_key
+// actually put the useful part in -- "invalid x-api-key", "Connection
+// refused -- is Ollama running?", etc. Falling back to a generic message
+// only when the backend didn't send one (network error, CORS, ...).
+function errorDetail(error: unknown, fallback: string): string {
+  if (isAxiosError(error) && typeof error.response?.data?.detail === 'string') {
+    return error.response.data.detail
+  }
+  return fallback
+}
 
 const FEATURES = [
   { key: 'suggestions', label: 'Task suggestions', description: 'Suggests what to work on next, based on your open tasks.' },
@@ -63,7 +75,7 @@ function ProvidersSection() {
       setAddError(null)
       queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
     },
-    onError: () => setAddError('Could not connect -- see the app logs for details.'),
+    onError: (error) => setAddError(errorDetail(error, 'Could not connect -- see the app logs for details.')),
   })
 
   if (isLoading) return <p className="p-4 text-sm text-neutral-600">Loading…</p>
@@ -123,7 +135,7 @@ function ProvidersSection() {
               disabled={!addKey || connect.isPending}
               className="rounded bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700 disabled:opacity-50"
             >
-              Connect
+              {connect.isPending ? 'Connecting…' : 'Connect'}
             </button>
             <button
               onClick={() => { setShowAddForm(false); setAddError(null) }}
@@ -149,15 +161,26 @@ function ProviderRow({
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const setKey = useMutation({
     mutationFn: (apiKey: string) => aiApi.setProviderKey(provider.key, apiKey),
     onSuccess: () => {
       setEditing(false)
       setDraft('')
+      setEditError(null)
+      setTestResult(null)
       queryClient.invalidateQueries({ queryKey: ['ai-providers'] })
       queryClient.invalidateQueries({ queryKey: ['ai-settings'] })
     },
+    onError: (error) => setEditError(errorDetail(error, 'Could not save that key -- see the app logs for details.')),
+  })
+
+  const test = useMutation({
+    mutationFn: () => aiApi.verifyProvider(provider.key),
+    onSuccess: () => setTestResult({ ok: true, message: 'Connected -- verified just now.' }),
+    onError: (error) => setTestResult({ ok: false, message: errorDetail(error, 'Could not reach this provider.') }),
   })
 
   return (
@@ -175,6 +198,13 @@ function ProviderRow({
               Set as default
             </button>
           )}
+          <button
+            onClick={() => { setTestResult(null); test.mutate() }}
+            disabled={test.isPending}
+            className="text-xs text-neutral-500 hover:text-neutral-300 disabled:opacity-50"
+          >
+            {test.isPending ? 'Testing…' : 'Test connection'}
+          </button>
           {provider.requires_key && !editing && (
             <>
               <button onClick={() => setEditing(true)} className="text-xs text-neutral-500 hover:text-neutral-300">
@@ -190,6 +220,9 @@ function ProviderRow({
           )}
         </div>
       </div>
+      {testResult && (
+        <p className={`mt-1 text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>{testResult.message}</p>
+      )}
       {provider.requires_key && editing && (
         <div className="mt-2 flex gap-2">
           <input
@@ -205,14 +238,15 @@ function ProviderRow({
             disabled={!draft || setKey.isPending}
             className="rounded bg-neutral-800 px-3 py-1.5 text-sm hover:bg-neutral-700 disabled:opacity-50"
           >
-            Save
+            {setKey.isPending ? 'Saving…' : 'Save'}
           </button>
           <button
-            onClick={() => { setEditing(false); setDraft('') }}
+            onClick={() => { setEditing(false); setDraft(''); setEditError(null) }}
             className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800"
           >
             Cancel
           </button>
+          {editError && <p className="w-full text-xs text-red-400">{editError}</p>}
         </div>
       )}
     </div>
@@ -235,7 +269,7 @@ function FeatureProviderPicker({ feature, label, description }: { feature: strin
       setError(null)
       queryClient.invalidateQueries({ queryKey: ['ai-settings', feature] })
     },
-    onError: () => setError('That provider has no API key set -- connect it above, then try again.'),
+    onError: (error) => setError(errorDetail(error, 'That provider has no API key set -- connect it above, then try again.')),
   })
 
   const connected = (providers ?? []).filter((p) => p.configured)

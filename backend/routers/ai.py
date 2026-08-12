@@ -148,12 +148,51 @@ def set_provider_key(provider_key: str, payload: ProviderKeyIn):
     stored in the database: same "keys never touch the DB" boundary the
     provider abstraction has had since it was first built, just with a
     friendlier way to get the key into the one place it's ever read
-    from. Takes effect immediately (no restart) -- see env_file.py."""
+    from. Takes effect immediately (no restart) -- see env_file.py.
+
+    Setting a (non-empty) key is verified with a real, cheap request
+    before it's reported as configured -- a typo'd or revoked key would
+    otherwise sit there silently reporting "Configured" until the first
+    real feature call failed with a 502. On verification failure, the
+    key is rolled back (never left half-saved) and the request itself
+    fails with a clear reason. Clearing a key (empty/omitted) skips
+    verification -- there's nothing to verify when removing something."""
     preset = get_preset(provider_key)
     if preset is None:
         raise HTTPException(status_code=404, detail=f"Unknown provider '{provider_key}'")
 
-    upsert_key(preset.env_key, payload.api_key)
+    if payload.api_key:
+        upsert_key(preset.env_key, payload.api_key)
+        try:
+            get_provider(preset.key).verify()
+        except ProviderError as e:
+            upsert_key(preset.env_key, None)  # roll back -- don't leave an unverified key saved
+            raise HTTPException(status_code=502, detail=f"Could not verify this key: {e}")
+    else:
+        upsert_key(preset.env_key, payload.api_key)
+
+    return {
+        "key": preset.key, "label": preset.label,
+        "configured": is_configured(preset.key), "requires_key": preset.requires_key,
+    }
+
+
+@router.post("/providers/{provider_key}/verify", response_model=ProviderStatus)
+def verify_provider(provider_key: str):
+    """On-demand 'Test connection' for a provider that already reports
+    configured=True -- including local servers (Ollama/LM Studio), which
+    is_configured() always reports as configured without ever checking
+    they're actually running. Doesn't touch .env either way; this only
+    answers "does this work right now", it doesn't change what's saved."""
+    preset = get_preset(provider_key)
+    if preset is None:
+        raise HTTPException(status_code=404, detail=f"Unknown provider '{provider_key}'")
+
+    try:
+        get_provider(preset.key).verify()
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
     return {
         "key": preset.key, "label": preset.label,
         "configured": is_configured(preset.key), "requires_key": preset.requires_key,

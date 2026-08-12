@@ -13,6 +13,18 @@ class GeminiProvider(AIProvider):
             raise ProviderError(f"{preset.env_key} is not set")
         self._api_key = api_key
 
+    def verify(self) -> None:
+        try:
+            from google import genai
+        except ImportError as e:
+            raise ProviderError("google-genai package is not installed") from e
+
+        try:
+            client = genai.Client(api_key=self._api_key)
+            next(iter(client.models.list(config={"page_size": 1})), None)
+        except Exception as e:
+            raise ProviderError(f"Gemini rejected the request: {e}") from e
+
     def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
         try:
             from google import genai

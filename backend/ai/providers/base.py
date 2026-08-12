@@ -27,3 +27,15 @@ class AIProvider(ABC):
         """Send a chat completion request and return the model's reply
         as plain text. `messages` is [{"role": "user"|"assistant", "content": str}, ...].
         Raises ProviderError on failure."""
+
+    @abstractmethod
+    def verify(self) -> None:
+        """Confirms this provider is actually reachable and, for keyed
+        providers, that the key is genuinely valid -- not just present as
+        a non-empty string (which is all `is_configured()` checks, since
+        that's meant to run with no API call at all). Deliberately a
+        models-list call, not a chat completion: cheap or free on every
+        provider this app supports, and doesn't risk running a real
+        generation against a possibly-slow local model just to answer
+        "is this connected". Returns normally on success, raises
+        ProviderError with a clear message on failure."""

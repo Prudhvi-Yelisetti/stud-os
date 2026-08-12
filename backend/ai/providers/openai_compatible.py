@@ -27,6 +27,21 @@ class OpenAICompatibleProvider(AIProvider):
                 raise ProviderError(f"{preset.env_key} is not set")
         self._api_key = api_key
 
+    def verify(self) -> None:
+        try:
+            from openai import OpenAI
+        except ImportError as e:
+            raise ProviderError("openai package is not installed") from e
+
+        try:
+            client_kwargs = {"api_key": self._api_key}
+            if self._base_url:
+                client_kwargs["base_url"] = self._base_url
+            client = OpenAI(**client_kwargs)
+            client.models.list()
+        except Exception as e:
+            raise ProviderError(f"{self._preset.label} rejected the request: {e}") from e
+
     def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
         try:
             from openai import OpenAI
