@@ -77,7 +77,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 120 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 124 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -685,6 +685,44 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     preserve). Bumped `frontend/package.json` and `main.py`'s FastAPI
     `version=` to `1.0.0`, tagged `v1.0.0`, pushed the tag. Committed,
     pushed, CI green.
+17. **API keys were never actually verified -- fixed.** User doubted
+    whether "Connected" in Settings meant anything real, and was right
+    to: `is_configured()` only ever checked `bool(os.environ.get(key))`
+    -- presence of a non-empty string, never a real API call. A typo'd
+    or already-revoked key would sit there reporting "Configured" until
+    the first real feature call 502'd, and local servers (Ollama/LM
+    Studio) were *always* reported connected with zero checking they
+    were actually running. New `AIProvider.verify()` on all three
+    adapters, implemented as a cheap `models.list()` call rather than a
+    full chat completion -- fast and free-or-near-free on every
+    supported provider, and doesn't risk hanging on a slow local model
+    just to answer "is this connected" (worth remembering given how long
+    a real local generation took to test back in session 10 -- a models
+    list call sidesteps that entirely). Wired into `PUT
+    .../providers/{key}/key` (a new key is verified for real before
+    being reported as saved; on failure it's rolled back, never left
+    half-saved) and a new standalone `POST .../providers/{key}/verify`
+    that powers an on-demand "Test connection" button now shown on
+    *every* connected row, closing the local-provider gap too. Frontend
+    now surfaces the real backend error detail (FastAPI's
+    `HTTPException(detail=...)`) instead of a generic string. 124/124
+    backend tests pass (5 new). **Live-verified against real services on
+    purpose, not mocks** -- this feature's entire point is distinguishing
+    "looks configured" from "actually works", so mocking the
+    verification itself would have proven nothing about whether it's
+    real: submitted a genuinely fake Anthropic key through the real API
+    and got Anthropic's actual 401 back, confirmed the key was never
+    written to `.env`, confirmed the exact error renders in the real
+    Add-API-key form in a real browser with the key still there to fix;
+    tested "Test connection" against a real, running Ollama instance
+    (succeeded), stopped Ollama and tested again (real connection-refused
+    error), restarted Ollama afterward since it was running before this
+    session touched it. Desktop Commander dropped once mid-session right
+    before the final pre-commit test/build run -- nothing lost (confirmed
+    via `git status` on reconnect, matching the by-now-established
+    recovery pattern), just re-ran everything cleanly before committing.
+    Committed, pushed, CI green. **AppImage not rebuilt for this session's
+    change** -- not asked for this time.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -722,7 +760,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (120 tests), isolated temp-DB fixture
+  tests/                 pytest suite (124 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -873,12 +911,11 @@ Windows packaging (Linux-only for now, matching this machine), and the
 built binary isn't attached anywhere yet -- distribution is via GitHub
 Releases once the app is actually tagged (see the still-open license/
 version-tag decision below). **The AppImage currently sitting in the
-repo root (if one still is) is now two sessions stale** -- it predates
-both session 14's provider-settings redesign and session 15's
-attachment-leak fix. The user was explicitly asked and said not to
-rebuild yet (session 15) -- don't rebuild unprompted, just be aware
-"the packaged app" and "what the code actually does" have diverged
-until someone asks for a rebuild.
+repo root (if one still is) is stale again** -- it was rebuilt in
+session 16 (picking up sessions 14 and 15's changes) but not again
+after session 17's key-verification feature. Check the most recent
+session in §4 before assuming the packaged binary matches the code;
+don't rebuild unprompted unless asked.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
@@ -915,3 +952,13 @@ FastAPI `version=` should be bumped to `1.0.0` and a `v1.0.0` git tag
 pushed as part of that same session — check §4's session 16 entry and
 `git tag -l` to confirm whether that actually landed, rather than
 assuming from this paragraph alone.
+
+**"Configured" now means actually verified, not just non-empty (session
+17, §4).** `AIProvider.verify()` (a cheap `models.list()` call, not a
+full chat completion) backs both the Add-API-key flow -- a bad key
+never gets saved -- and a new "Test connection" button on every
+connected row, including Ollama/LM Studio, which previously reported
+connected unconditionally with zero checking. If a future provider
+adapter gets added, it needs a real `verify()` too, not a stub that
+always returns success -- the whole point of this feature is that
+"Configured" means something.
