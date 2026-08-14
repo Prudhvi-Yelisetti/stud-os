@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.session import get_db
 from backend.database.models.user import User
-from backend.database.models.ai import AISettings, Chunk
+from backend.database.models.ai import AISettings, Chunk, AIModel
 from backend.database.models.tasks import Task, TaskStatus
 from backend.database.models.notes import Chapter, Notebook
 from backend.dependencies import get_current_user
@@ -59,6 +59,28 @@ def _resolve_provider(db: Session, feature: str) -> str | None:
     return None
 
 
+def _resolve_model(db: Session, feature: str, provider_key: str) -> str | None:
+    """A feature's effective model: its own model_override if set, else
+    the resolved provider's default added model (AIModel.is_default for
+    provider_key), else None -- meaning "let the provider adapter fall
+    back to its own env-var/preset default", exactly the behavior before
+    model management existed at all. `provider_key` is the *already
+    resolved* effective provider (see _resolve_provider) -- if a feature
+    inherited its provider from the global default, it inherits that
+    provider's default model the same way, which is what "the default
+    model from the default provider is the default for AI activities"
+    actually means at read time, not a separate concept to track."""
+    row = db.query(AISettings).filter(AISettings.feature == feature).first()
+    if row and row.model_override:
+        return row.model_override
+    default_model = (
+        db.query(AIModel)
+        .filter(AIModel.provider_key == provider_key, AIModel.is_default.is_(True))
+        .first()
+    )
+    return default_model.model_id if default_model else None
+
+
 class ProviderStatus(BaseModel):
     key: str
     label: str
@@ -83,6 +105,16 @@ class AISettingsOut(BaseModel):
 class AISettingsUpdate(BaseModel):
     provider_key: str | None = None
     model_override: str | None = None
+
+
+class ModelIn(BaseModel):
+    model_id: str
+
+
+class ModelOut(BaseModel):
+    id: str
+    model_id: str
+    is_default: bool
 
 
 class RelatedNoteOut(BaseModel):
@@ -122,6 +154,10 @@ class AskIn(BaseModel):
     # Empty list means "search everything" -- there's no forced default
     # selection the user has to first opt out of.
     sources: list[str] = []
+    # Overrides the resolved provider's default model for just this chat.
+    # None (the normal case) falls through to _resolve_model()'s usual
+    # override-then-provider-default-then-nothing chain.
+    model: str | None = None
 
 
 class AskSourceOut(BaseModel):
@@ -134,6 +170,7 @@ class AskOut(BaseModel):
     configured: bool
     answer: str | None = None
     sources: list[AskSourceOut] = []
+    model_used: str | None = None
 
 
 @router.get("/providers", response_model=list[ProviderStatus])
@@ -197,6 +234,96 @@ def verify_provider(provider_key: str):
         "key": preset.key, "label": preset.label,
         "configured": is_configured(preset.key), "requires_key": preset.requires_key,
     }
+
+
+@router.get("/providers/{provider_key}/available-models", response_model=list[str])
+def available_models(provider_key: str):
+    """Live model catalog fetched from the provider's real API -- what
+    Settings' "add a model" picker shows to choose from. Not cached:
+    catalogs change over time and this is a low-frequency, on-demand
+    action (opening the add-model picker), not something called on every
+    page load, so staleness isn't worth trading for the complexity of a
+    cache with its own invalidation story."""
+    preset = get_preset(provider_key)
+    if preset is None:
+        raise HTTPException(status_code=404, detail=f"Unknown provider '{provider_key}'")
+    try:
+        return get_provider(preset.key).list_models()
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/providers/{provider_key}/models", response_model=list[ModelOut])
+def added_models(provider_key: str, db: Session = Depends(get_db)):
+    """The user's own curated subset for this provider -- not the live
+    catalog above, see AIModel's docstring."""
+    rows = db.query(AIModel).filter(AIModel.provider_key == provider_key).order_by(AIModel.created_at).all()
+    return [ModelOut(id=r.id, model_id=r.model_id, is_default=r.is_default) for r in rows]
+
+
+@router.post("/providers/{provider_key}/models", response_model=ModelOut)
+def add_model(provider_key: str, payload: ModelIn, db: Session = Depends(get_db)):
+    preset = get_preset(provider_key)
+    if preset is None:
+        raise HTTPException(status_code=404, detail=f"Unknown provider '{provider_key}'")
+
+    existing = (
+        db.query(AIModel)
+        .filter(AIModel.provider_key == provider_key, AIModel.model_id == payload.model_id)
+        .first()
+    )
+    if existing:
+        return ModelOut(id=existing.id, model_id=existing.model_id, is_default=existing.is_default)
+
+    # The first model added for a provider becomes its default automatically
+    # -- otherwise adding exactly one model would leave that provider with
+    # no default at all, which defeats the point of adding it.
+    is_first = db.query(AIModel).filter(AIModel.provider_key == provider_key).count() == 0
+    row = AIModel(provider_key=provider_key, model_id=payload.model_id, is_default=is_first)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return ModelOut(id=row.id, model_id=row.model_id, is_default=row.is_default)
+
+
+@router.delete("/providers/{provider_key}/models/{model_row_id}", status_code=204)
+def remove_model(provider_key: str, model_row_id: str, db: Session = Depends(get_db)):
+    row = db.query(AIModel).filter(AIModel.id == model_row_id, AIModel.provider_key == provider_key).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Model not found")
+    was_default = row.is_default
+    db.delete(row)
+    db.commit()
+
+    if was_default:
+        # Promote another added model, if any, so the provider doesn't
+        # silently end up with zero default just because the one it had
+        # got removed -- same "pick something reasonable automatically"
+        # spirit as auto-defaulting the first model added.
+        remaining = (
+            db.query(AIModel)
+            .filter(AIModel.provider_key == provider_key)
+            .order_by(AIModel.created_at)
+            .first()
+        )
+        if remaining:
+            remaining.is_default = True
+            db.commit()
+
+
+@router.put("/providers/{provider_key}/models/{model_row_id}/default", response_model=ModelOut)
+def set_default_model(provider_key: str, model_row_id: str, db: Session = Depends(get_db)):
+    row = db.query(AIModel).filter(AIModel.id == model_row_id, AIModel.provider_key == provider_key).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    db.query(AIModel).filter(
+        AIModel.provider_key == provider_key, AIModel.id != row.id
+    ).update({"is_default": False})
+    row.is_default = True
+    db.commit()
+    db.refresh(row)
+    return ModelOut(id=row.id, model_id=row.model_id, is_default=row.is_default)
 
 
 @router.get("/settings/{feature}", response_model=AISettingsOut)
@@ -311,9 +438,11 @@ def task_suggestions(db: Session = Depends(get_db), user: User = Depends(get_cur
 
     try:
         provider = get_provider(provider_key)
+        model = _resolve_model(db, "suggestions", provider_key)
         reply = provider.chat(
             messages=[{"role": "user", "content": prompt}],
             system="You are a concise, practical productivity assistant inside a personal task manager.",
+            model=model,
         )
     except ProviderError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -357,6 +486,7 @@ def generate_quiz(
 
     try:
         provider = get_provider(provider_key)
+        model = _resolve_model(db, "study", provider_key)
         reply = provider.chat(
             messages=[{"role": "user", "content": prompt}],
             system="You are a study-quiz generator. You only ever respond with raw JSON, never prose.",
@@ -365,6 +495,7 @@ def generate_quiz(
             # which fails to parse and shows up as a confusing "invalid quiz"
             # error rather than an obviously-a-length-problem one.
             max_tokens=min(300 + count * 350, 8192),
+            model=model,
         )
     except ProviderError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -450,8 +581,9 @@ def ask_notes(payload: AskIn, db: Session = Depends(get_db), user: User = Depend
 
     try:
         provider = get_provider(provider_key)
-        reply = provider.chat(messages=history, system=system)
+        model = payload.model or _resolve_model(db, "ask", provider_key)
+        reply = provider.chat(messages=history, system=system, model=model)
     except ProviderError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    return AskOut(configured=True, answer=reply, sources=answer_sources)
+    return AskOut(configured=True, answer=reply, sources=answer_sources, model_used=model)

@@ -50,7 +50,7 @@ def test_quiz_generates_and_parses_questions(client, monkeypatch):
     client.put("/api/ai/settings/study", json={"provider_key": "anthropic"})
     ch = _seed_chapter(client)
 
-    def fake_chat(self, messages, system=None, max_tokens=None):
+    def fake_chat(self, messages, system=None, max_tokens=None, model=None):
         assert "Recursion" in messages[0]["content"]
         return _VALID_QUIZ_REPLY
 
@@ -69,7 +69,7 @@ def test_quiz_tolerates_markdown_fenced_json(client, monkeypatch):
     client.put("/api/ai/settings/study", json={"provider_key": "anthropic"})
     ch = _seed_chapter(client)
 
-    def fake_chat(self, messages, system=None, max_tokens=None):
+    def fake_chat(self, messages, system=None, max_tokens=None, model=None):
         return f"```json\n{_VALID_QUIZ_REPLY}\n```"
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -88,7 +88,7 @@ def test_quiz_scales_max_tokens_with_question_count(client, monkeypatch):
 
     captured = {}
 
-    def fake_chat(self, messages, system=None, max_tokens=None):
+    def fake_chat(self, messages, system=None, max_tokens=None, model=None):
         captured["max_tokens"] = max_tokens
         return _VALID_QUIZ_REPLY
 
@@ -109,7 +109,7 @@ def test_quiz_surfaces_malformed_response_as_502(client, monkeypatch):
     client.put("/api/ai/settings/study", json={"provider_key": "anthropic"})
     ch = _seed_chapter(client)
 
-    def fake_chat(self, messages, system=None, max_tokens=None):
+    def fake_chat(self, messages, system=None, max_tokens=None, model=None):
         return "not valid json at all"
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -127,7 +127,7 @@ def test_quiz_rejects_out_of_range_correct_index(client, monkeypatch):
         "question": "?", "choices": ["a", "b"], "correct_index": 9, "explanation": "e",
     }]})
 
-    def fake_chat(self, messages, system=None, max_tokens=None):
+    def fake_chat(self, messages, system=None, max_tokens=None, model=None):
         return bad_reply
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)

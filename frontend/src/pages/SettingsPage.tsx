@@ -163,6 +163,7 @@ function ProviderRow({
   const [draft, setDraft] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [showModels, setShowModels] = useState(false)
 
   const setKey = useMutation({
     mutationFn: (apiKey: string) => aiApi.setProviderKey(provider.key, apiKey),
@@ -186,9 +187,14 @@ function ProviderRow({
   return (
     <div className="border-b border-neutral-800 p-4 last:border-0">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-2">
           <p className="text-sm font-medium">{provider.label}</p>
-          {!provider.requires_key && <p className="text-xs text-neutral-500">Runs locally -- no API key needed.</p>}
+          <button
+            onClick={() => setShowModels((v) => !v)}
+            className="rounded border border-neutral-800 px-1.5 py-0.5 text-xs text-neutral-500 hover:text-neutral-300"
+          >
+            Models {showModels ? '▴' : '▾'}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {isDefault ? (
@@ -220,6 +226,7 @@ function ProviderRow({
           )}
         </div>
       </div>
+      {!provider.requires_key && <p className="mt-0.5 text-xs text-neutral-500">Runs locally -- no API key needed.</p>}
       {testResult && (
         <p className={`mt-1 text-xs ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>{testResult.message}</p>
       )}
@@ -247,6 +254,127 @@ function ProviderRow({
             Cancel
           </button>
           {editError && <p className="w-full text-xs text-red-400">{editError}</p>}
+        </div>
+      )}
+      {showModels && <ModelsPanel providerKey={provider.key} />}
+    </div>
+  )
+}
+
+function ModelsPanel({ providerKey }: { providerKey: string }) {
+  const queryClient = useQueryClient()
+  const [showAdd, setShowAdd] = useState(false)
+  const [available, setAvailable] = useState<string[] | null>(null)
+  const [fetching, setFetching] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [selectedToAdd, setSelectedToAdd] = useState('')
+
+  const { data: models } = useQuery({
+    queryKey: ['ai-models', providerKey],
+    queryFn: () => aiApi.addedModels(providerKey),
+  })
+
+  const addModel = useMutation({
+    mutationFn: (modelId: string) => aiApi.addModel(providerKey, modelId),
+    onSuccess: () => {
+      setShowAdd(false)
+      queryClient.invalidateQueries({ queryKey: ['ai-models', providerKey] })
+    },
+    onError: (error) => setFetchError(errorDetail(error, 'Could not add that model.')),
+  })
+
+  const removeModel = useMutation({
+    mutationFn: (rowId: string) => aiApi.removeModel(providerKey, rowId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai-models', providerKey] }),
+  })
+
+  const setDefaultModel = useMutation({
+    mutationFn: (rowId: string) => aiApi.setDefaultModel(providerKey, rowId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai-models', providerKey] }),
+  })
+
+  async function openAddForm() {
+    setShowAdd(true)
+    setFetchError(null)
+    setFetching(true)
+    try {
+      const list = await aiApi.availableModels(providerKey)
+      setAvailable(list)
+      setSelectedToAdd(list[0] ?? '')
+    } catch (error) {
+      setFetchError(errorDetail(error, 'Could not fetch the available models for this provider.'))
+      setAvailable([])
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  return (
+    <div className="mt-2 rounded border border-neutral-800 bg-neutral-950 p-3">
+      {(models ?? []).length === 0 && !showAdd && (
+        <p className="text-xs text-neutral-600">No models added yet.</p>
+      )}
+      {(models ?? []).map((m) => (
+        <div key={m.id} className="flex items-center justify-between gap-2 py-1">
+          <span className="font-mono text-xs">{m.model_id}</span>
+          <div className="flex items-center gap-2">
+            {m.is_default ? (
+              <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] text-emerald-400">Default</span>
+            ) : (
+              <button
+                onClick={() => setDefaultModel.mutate(m.id)}
+                className="text-[10px] text-neutral-500 hover:text-neutral-300"
+              >
+                Set default
+              </button>
+            )}
+            <button
+              onClick={() => removeModel.mutate(m.id)}
+              className="text-[10px] text-neutral-500 hover:text-red-400"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {!showAdd ? (
+        <button onClick={openAddForm} className="mt-1 text-xs text-neutral-400 hover:text-neutral-200">
+          + Add model
+        </button>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {fetching && <p className="text-xs text-neutral-600">Fetching available models…</p>}
+          {fetchError && <p className="w-full text-xs text-red-400">{fetchError}</p>}
+          {available && available.length > 0 && (
+            <>
+              <select
+                value={selectedToAdd}
+                onChange={(e) => setSelectedToAdd(e.target.value)}
+                className="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs"
+              >
+                {available.map((id) => (
+                  <option key={id} value={id}>{id}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => addModel.mutate(selectedToAdd)}
+                disabled={addModel.isPending}
+                className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 disabled:opacity-50"
+              >
+                {addModel.isPending ? 'Adding…' : 'Add'}
+              </button>
+            </>
+          )}
+          {available && available.length === 0 && !fetchError && (
+            <p className="text-xs text-neutral-600">This provider didn't return any models.</p>
+          )}
+          <button
+            onClick={() => setShowAdd(false)}
+            className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
         </div>
       )}
     </div>

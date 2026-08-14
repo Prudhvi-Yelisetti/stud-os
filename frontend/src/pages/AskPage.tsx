@@ -17,13 +17,28 @@ export function AskPage() {
   const [selectedSources, setSelectedSources] = useState<string[]>([])
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [draft, setDraft] = useState('')
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Which provider "ask" actually resolves to right now (its own override,
+  // else the global default) -- the model picker below shows THIS
+  // provider's added models, since a model only makes sense in the
+  // context of the provider it belongs to.
+  const { data: askSettings } = useQuery({ queryKey: ['ai-settings', 'ask'], queryFn: () => aiApi.getSettings('ask') })
+  const providerKey = askSettings?.effective_provider_key ?? null
+
+  const { data: models } = useQuery({
+    queryKey: ['ai-models', providerKey],
+    queryFn: () => aiApi.addedModels(providerKey!),
+    enabled: !!providerKey,
+  })
 
   const ask = useMutation({
     mutationFn: (history: DisplayMessage[]) =>
       aiApi.ask(
         history.map((m) => ({ role: m.role, content: m.content })),
         selectedSources,
+        selectedModel,
       ),
   })
 
@@ -51,11 +66,22 @@ export function AskPage() {
   }
 
   const notConfigured = ask.data && !ask.data.configured
+  const hasAddedModels = (models ?? []).length > 0
+  const effectiveModelLabel =
+    selectedModel ?? (models ?? []).find((m) => m.is_default)?.model_id ?? null
 
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-neutral-800 p-4">
-        <h1 className="mb-2 text-xl font-semibold">Ask your notes</h1>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold">Ask your notes</h1>
+          {providerKey && <ModelPicker
+            providerKey={providerKey}
+            models={models ?? []}
+            selected={selectedModel}
+            onSelect={setSelectedModel}
+          />}
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {notebooks?.map((nb) => (
             <button
@@ -83,6 +109,7 @@ export function AskPage() {
         </div>
         <p className="mt-1.5 text-xs text-neutral-600">
           {selectedSources.length === 0 ? 'Searching everything' : `${selectedSources.length} source(s) selected`}
+          {hasAddedModels && effectiveModelLabel && <> · Model: {effectiveModelLabel}</>}
         </p>
       </div>
 
@@ -151,5 +178,60 @@ export function AskPage() {
         </button>
       </div>
     </div>
+  )
+}
+
+// The literal "while chatting, select a model" ask: only ever shows
+// models the user has ADDED for the active provider (Settings' "+ Add
+// model" flow), never the provider's full live catalog -- picking a
+// model to chat with and curating which models are worth having are two
+// different actions. If none have been added yet, clicking prompts to
+// go add one instead of silently doing nothing or guessing a model.
+function ModelPicker({
+  providerKey, models, selected, onSelect,
+}: {
+  providerKey: string
+  models: { id: string; model_id: string; is_default: boolean }[]
+  selected: string | null
+  onSelect: (model: string | null) => void
+}) {
+  const [prompt, setPrompt] = useState(false)
+
+  if (models.length === 0) {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setPrompt((v) => !v)}
+          className="rounded border border-neutral-800 px-2 py-1 text-xs text-neutral-500 hover:text-neutral-300"
+        >
+          Select model
+        </button>
+        {prompt && (
+          <div className="absolute right-0 z-10 mt-1 w-56 rounded border border-neutral-700 bg-neutral-900 p-2 text-xs text-neutral-400 shadow-lg">
+            No models added for this provider yet.{' '}
+            <Link to="/settings" className="text-neutral-200 underline decoration-dotted">
+              Add one in Settings
+            </Link>{' '}
+            first.
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const defaultModel = models.find((m) => m.is_default)?.model_id
+  return (
+    <select
+      value={selected ?? ''}
+      onChange={(e) => onSelect(e.target.value || null)}
+      className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs text-neutral-300"
+    >
+      <option value="">
+        {defaultModel ? `Default (${defaultModel})` : 'Default'} · {providerKey}
+      </option>
+      {models.map((m) => (
+        <option key={m.id} value={m.model_id}>{m.model_id}</option>
+      ))}
+    </select>
   )
 }

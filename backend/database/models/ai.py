@@ -6,7 +6,7 @@ one table instead of one per source entity.
 Embeddings are always generated locally (see backend/ai/embeddings.py);
 this table has no notion of an API provider.
 """
-from sqlalchemy import String, Text, Integer, JSON, ForeignKey
+from sqlalchemy import String, Text, Integer, JSON, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base, TimestampedMixin, UUIDPKMixin
@@ -40,3 +40,20 @@ class AISettings(Base, UUIDPKMixin, TimestampedMixin):
     feature: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     provider_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
     model_override: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class AIModel(Base, UUIDPKMixin, TimestampedMixin):
+    """A model a user has explicitly added for one provider -- e.g.
+    "claude-sonnet-4-6" under provider_key="anthropic". Providers list
+    dozens of models via their real API (see AIProvider.list_models());
+    this table is the user's own curated subset, not a mirror of that
+    full catalog. Exactly one row per provider_key should have
+    is_default=True at a time -- enforced in routers/ai.py's mutation
+    endpoints, not at the DB level, same pattern as AISettings.feature
+    being effectively-singleton per value without a state machine."""
+    __tablename__ = "ai_models"
+    __table_args__ = (UniqueConstraint("provider_key", "model_id", name="uq_ai_models_provider_model"),)
+
+    provider_key: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    model_id: Mapped[str] = mapped_column(String(150), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

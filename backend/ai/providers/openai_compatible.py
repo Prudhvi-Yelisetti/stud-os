@@ -1,6 +1,6 @@
 import os
 
-from backend.ai.providers.base import AIProvider, DEFAULT_MAX_TOKENS, ProviderError
+from backend.ai.providers.base import AIProvider, DEFAULT_MAX_TOKENS, ProviderError, friendly_error
 from backend.ai.providers.registry import ProviderPreset
 
 
@@ -27,37 +27,39 @@ class OpenAICompatibleProvider(AIProvider):
                 raise ProviderError(f"{preset.env_key} is not set")
         self._api_key = api_key
 
-    def verify(self) -> None:
+    def _client(self):
+        from openai import OpenAI
+        client_kwargs = {"api_key": self._api_key}
+        if self._base_url:
+            client_kwargs["base_url"] = self._base_url
+        return OpenAI(**client_kwargs)
+
+    def list_models(self) -> list[str]:
         try:
-            from openai import OpenAI
+            from openai import OpenAI  # noqa: F401 -- import check only, _client() does the real import
         except ImportError as e:
             raise ProviderError("openai package is not installed") from e
 
         try:
-            client_kwargs = {"api_key": self._api_key}
-            if self._base_url:
-                client_kwargs["base_url"] = self._base_url
-            client = OpenAI(**client_kwargs)
-            client.models.list()
+            return [m.id for m in self._client().models.list()]
         except Exception as e:
-            raise ProviderError(f"{self._preset.label} rejected the request: {e}") from e
+            raise ProviderError(friendly_error(self._preset.label, e)) from e
 
-    def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
+    def chat(
+        self, messages: list[dict], system: str | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS, model: str | None = None,
+    ) -> str:
         try:
-            from openai import OpenAI
+            from openai import OpenAI  # noqa: F401
         except ImportError as e:
             raise ProviderError("openai package is not installed") from e
 
         try:
-            client_kwargs = {"api_key": self._api_key}
-            if self._base_url:
-                client_kwargs["base_url"] = self._base_url
-            client = OpenAI(**client_kwargs)
-
+            client = self._client()
             full_messages = ([{"role": "system", "content": system}] if system else []) + messages
             response = client.chat.completions.create(
-                model=self._model, messages=full_messages, max_tokens=max_tokens,
+                model=model or self._model, messages=full_messages, max_tokens=max_tokens,
             )
             return response.choices[0].message.content or ""
         except Exception as e:
-            raise ProviderError(f"{self._preset.label} request failed: {e}") from e
+            raise ProviderError(friendly_error(self._preset.label, e)) from e

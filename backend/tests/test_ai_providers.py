@@ -174,7 +174,7 @@ def test_task_suggestions_uses_the_global_default_when_no_override_set(client, m
     client.put("/api/ai/settings/default", json={"provider_key": "anthropic"})
     client.post("/api/tasks", json={"title": "Write the docs"})
 
-    def fake_chat(self, messages, system=None, max_tokens=None):
+    def fake_chat(self, messages, system=None, max_tokens=None, model=None):
         return "Focus on writing the docs."
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -232,7 +232,7 @@ def test_task_suggestions_calls_configured_provider(client, monkeypatch):
     client.put("/api/ai/settings/suggestions", json={"provider_key": "anthropic"})
     client.post("/api/tasks", json={"title": "Write the report", "priority": "high"})
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         assert "Write the report" in messages[0]["content"]
         return "Focus on the report first -- it's your only high-priority item."
 
@@ -248,7 +248,7 @@ def test_task_suggestions_surfaces_provider_error_as_502(client, monkeypatch):
     client.put("/api/ai/settings/suggestions", json={"provider_key": "anthropic"})
     client.post("/api/tasks", json={"title": "Something", "priority": "medium"})
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         raise ProviderError("simulated failure")
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)

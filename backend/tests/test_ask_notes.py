@@ -25,7 +25,7 @@ def _seed(client):
 def test_ask_not_configured_by_default(client):
     _seed(client)
     resp = client.post("/api/ai/ask", json={"messages": [{"role": "user", "content": "What is recursion?"}]}).json()
-    assert resp == {"configured": False, "answer": None, "sources": []}
+    assert resp == {"configured": False, "answer": None, "sources": [], "model_used": None}
 
 
 def test_ask_requires_messages_ending_in_user(client, monkeypatch):
@@ -46,7 +46,7 @@ def test_ask_retrieves_relevant_context_and_returns_sources(client, monkeypatch)
 
     captured = {}
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         captured["system"] = system
         captured["messages"] = messages
         return "Recursion is when a function calls itself."
@@ -73,7 +73,7 @@ def test_ask_scoped_to_selected_notebook_excludes_others(client, monkeypatch):
     client.put("/api/ai/settings/ask", json={"provider_key": "anthropic"})
     seeded = _seed(client)
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         return "answer"
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -94,7 +94,7 @@ def test_ask_journal_sentinel_scopes_to_journal_only(client, monkeypatch):
     client.put("/api/ai/settings/ask", json={"provider_key": "anthropic"})
     seeded = _seed(client)
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         return "answer"
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -119,7 +119,7 @@ def test_ask_caps_history_sent_to_provider(client, monkeypatch):
 
     captured = {}
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         captured["messages"] = messages
         return "ok"
 
@@ -137,7 +137,7 @@ def test_ask_surfaces_provider_error_as_502(client, monkeypatch):
 
     from backend.ai.providers.base import ProviderError
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         raise ProviderError("boom")
 
     monkeypatch.setattr("backend.ai.providers.anthropic_provider.AnthropicProvider.chat", fake_chat)
@@ -150,7 +150,7 @@ def test_ask_works_with_no_notes_at_all(client, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     client.put("/api/ai/settings/ask", json={"provider_key": "anthropic"})
 
-    def fake_chat(self, messages, system=None):
+    def fake_chat(self, messages, system=None, model=None):
         assert "No matching notes" in system
         return "I don't have any notes to draw from yet."
 

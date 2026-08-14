@@ -151,6 +151,12 @@ export interface AISettings {
   effective_provider_key: string | null // override if set, else the global default, else null
 }
 
+export interface AIModel {
+  id: string
+  model_id: string
+  is_default: boolean
+}
+
 export interface RelatedNote {
   type: 'chapter' | 'journal'
   id: string
@@ -191,6 +197,7 @@ export interface AskResponse {
   configured: boolean
   answer: string | null
   sources: AskSource[]
+  model_used: string | null
 }
 
 export interface GraphNode {
