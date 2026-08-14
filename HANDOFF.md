@@ -77,7 +77,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 124 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 139 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -723,6 +723,54 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     recovery pattern), just re-ran everything cleanly before committing.
     Committed, pushed, CI green. **AppImage not rebuilt for this session's
     change** -- not asked for this time.
+18. **Rebuilt the AppImage (closing out session 17), then added model
+    management and cleaned up error messages.** User asked to create a
+    new AppImage -- built and launched it, confirmed via curl that the
+    real (non-stub) `verify()`/model logic was present by testing against
+    a genuinely offline Ollama and getting a real connection-refused
+    error back, not a canned response. Then, from a screenshot of
+    Settings, two related asks: the raw error dump on a failed key
+    ("Error code: 401 - {'type': 'error', ...'message': 'invalid
+    x-api-key'}...}") needed to be human-readable, and there was no way
+    to pick which *model* a provider uses, only which provider. New
+    `friendly_error(label, exc)` in `providers/base.py` (auth/rate-limit/
+    connection errors get a clean canned message; otherwise extracts just
+    the `message` field from a dict-shaped body, or trims the raw string
+    as a last resort), used by every adapter's `chat()`/`list_models()`.
+    Model management mirrors the existing provider-key architecture
+    closely on purpose: new `AIModel` table (migration `8efd67ebff84`) --
+    a user's own curated subset per provider, not a mirror of the full
+    catalog; new `AIProvider.list_models()` on all three adapters, fetching
+    the *real* live catalog via each SDK's own `models.list()` -- the
+    same cheap call `verify()` already used, so `verify()` became a
+    concrete base-class method built on `list_models()` instead of 3
+    separate implementations, removing duplication and guaranteeing "is
+    this connected" and "what models does it offer" can never disagree.
+    Settings: each connected provider gets a "Models ▾" toggle beside its
+    name (matching the user's literal "beside the name" ask) revealing
+    added models (default-badged, removable, settable) and a "+ Add
+    model" flow that fetches the live catalog rather than a hardcoded
+    list. New `_resolve_model()`: a feature's own `model_override` wins,
+    else the resolved provider's default *added* model, else nothing
+    (unchanged prior fallback) -- wired into all three usage endpoints
+    via `chat()`'s new `model` parameter, so "the default model from the
+    default provider is the default for AI activities" is resolved at
+    call time, not just displayed in Settings. Ask page got a real
+    per-chat model picker (the literal "while chatting, select a model"
+    ask) scoped to the active provider's added models; zero added models
+    -> clicking prompts to add one in Settings with a working link,
+    rather than silently doing nothing, per the user's explicit ask.
+    139/139 backend tests pass (15 new). **Live-verified against a real,
+    currently-running Ollama instance, not mocks** -- fetched its actual
+    model catalog through the API, added one, confirmed it auto-defaulted
+    (first model added always becomes default, so adding exactly one
+    never leaves a provider with none), set Ollama as the global default
+    and confirmed Ask's picker showed "Default (qwen3.5:9b)" pulled live
+    from Settings, switched the default to LM Studio (which had zero
+    added models) and confirmed Ask correctly showed "Select model" with
+    the add-one-first prompt, and separately re-confirmed the cleaned-up
+    error message against a real, deliberately-fake Anthropic key.
+    Committed, pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -760,7 +808,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (124 tests), isolated temp-DB fixture
+  tests/                 pytest suite (139 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -912,10 +960,11 @@ built binary isn't attached anywhere yet -- distribution is via GitHub
 Releases once the app is actually tagged (see the still-open license/
 version-tag decision below). **The AppImage currently sitting in the
 repo root (if one still is) is stale again** -- it was rebuilt in
-session 16 (picking up sessions 14 and 15's changes) but not again
-after session 17's key-verification feature. Check the most recent
-session in §4 before assuming the packaged binary matches the code;
-don't rebuild unprompted unless asked.
+session 18 (picking up session 17's key-verification feature) but not
+again after session 18's own model-management/error-message changes,
+since that work happened *after* the rebuild in the same session. Check
+the most recent session in §4 before assuming the packaged binary
+matches the code; don't rebuild unprompted unless asked.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
@@ -936,6 +985,18 @@ than the specific fix: `Attachment` and `Chunk` are both polymorphic
 built the same way in the future needs the same explicit cleanup on
 permanent delete -- it will not cascade automatically just because a
 "real" model like Chapter or Notebook does.
+
+**Model management exists now (session 18, §4)**: each connected
+provider has its own curated list of added models (Settings' "Models ▾"
+toggle), one marked default, fetched from the provider's real live
+catalog rather than a hardcoded list. `_resolve_model()` in
+`routers/ai.py` mirrors `_resolve_provider()`'s cascade exactly (feature
+override → resolved provider's default added model → nothing). Ask has
+its own per-chat model picker on top of that, scoped to whichever
+provider is currently active. If a future provider adapter gets added,
+it needs a real `list_models()` too (`verify()` is built on it now, not
+separate) -- same "don't stub this out" reasoning session 17 already
+established for `verify()` itself.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
