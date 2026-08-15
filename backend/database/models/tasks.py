@@ -1,10 +1,10 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import String, Text, ForeignKey, DateTime, Boolean, Enum, Integer
+from sqlalchemy import String, Text, ForeignKey, Boolean, Enum, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.database.base import Base, TimestampedMixin, SoftDeleteMixin, UUIDPKMixin
+from backend.database.base import Base, TimestampedMixin, SoftDeleteMixin, UUIDPKMixin, UTCDateTime
 
 
 class TaskStatus(str, enum.Enum):
@@ -47,9 +47,9 @@ class Task(Base, UUIDPKMixin, TimestampedMixin, SoftDeleteMixin):
     repeat_rule: Mapped[RepeatRule] = mapped_column(
         Enum(RepeatRule), default=RepeatRule.none, nullable=False
     )
-    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     is_penalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     subtasks: Mapped[list["Subtask"]] = relationship(back_populates="task", cascade="all, delete-orphan")
