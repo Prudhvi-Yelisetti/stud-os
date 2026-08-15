@@ -36,24 +36,46 @@ PORT=8420
 
 mkdir -p "$DATA_DIR"
 
-# ---- seed the DB on first run only -- never overwrite existing data ----
-if [ ! -f "$DATA_DIR/stud_os.db" ]; then
-    cp "$HERE/usr/seed.db" "$DATA_DIR/stud_os.db"
-    echo "Stud-OS: created a new database at $DATA_DIR/stud_os.db"
-fi
-
 # ---- port sanity check ----
 # 8420 was chosen (see README/HANDOFF) specifically to avoid the 8000
 # range other local projects on this machine use. If something's
 # already answering here, assume it's a previous Stud-OS instance
 # rather than silently trying another port -- same reasoning as dev's
 # "check for stale processes first" habit, just applied to a packaged
-# app instead of `ps aux`.
+# app instead of `ps aux`. Checked BEFORE seeding/migrating below: if
+# another instance already has the DB open, running alembic
+# concurrently against it risks a lock conflict, not just a wasted
+# no-op.
 if command -v curl >/dev/null 2>&1 && curl -s -o /dev/null "http://127.0.0.1:$PORT/api/health"; then
     echo "Stud-OS: something is already answering on port $PORT."
     echo "         If that's a previous Stud-OS instance, this one will just open a browser tab at it."
     echo "         If it's something else, stop it first and relaunch."
 else
+    # ---- seed the DB on first run only -- never overwrite existing data ----
+    if [ ! -f "$DATA_DIR/stud_os.db" ]; then
+        cp "$HERE/usr/seed.db" "$DATA_DIR/stud_os.db"
+        echo "Stud-OS: created a new database at $DATA_DIR/stud_os.db"
+    fi
+
+    # ---- apply any migrations newer than this install's DB ----
+    # The seed DB above is only current as of the AppImage that produced
+    # it -- an existing install's DB can predate migrations added since
+    # it was first created (e.g. a table a newer feature needs doesn't
+    # exist yet -- this happened for real: model management shipped
+    # after some installs' DBs were already created, and those installs
+    # 500'd on the new endpoints until this fix). `alembic upgrade head`
+    # is idempotent (no-ops if already current), so it's safe and cheap
+    # to just always run it here rather than trying to detect "is this
+    # DB behind" ourselves. Same CWD/--app-dir reasoning as the uvicorn
+    # invocation below: alembic.ini's prepend_sys_path=. needs usr/app on
+    # the path (one level above backend/) for its env.py's `backend.*`
+    # imports to resolve, using the alembic/ directory bundled inside
+    # this AppImage, not any path on the host machine.
+    (cd "$HERE/usr/app" && \
+        DATABASE_URL="sqlite:///$DATA_DIR/stud_os.db" \
+        "$PYTHON" -m alembic -c "$HERE/usr/app/backend/alembic.ini" upgrade head) \
+        > "$DATA_DIR/migrations.log" 2>&1
+
     echo "Stud-OS: starting on port $PORT..."
     # exec matters here: without it, this subshell forks uvicorn as ITS
     # OWN child and $! captures the subshell's PID, not uvicorn's, which
@@ -95,7 +117,7 @@ if command -v xdg-open >/dev/null 2>&1; then
 else
     echo "         (open that URL manually -- xdg-open isn't available)"
 fi
-echo "Stud-OS: logs in $DATA_DIR/backend.log"
+echo "Stud-OS: logs in $DATA_DIR/backend.log (migrations.log for schema-update output)"
 echo "Stud-OS: press Ctrl+C here to stop it."
 
 wait
