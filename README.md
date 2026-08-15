@@ -36,7 +36,8 @@ All of V1 from the vision doc is built, tested, and in daily-usable shape:
     search never needs one): Anthropic, Gemini, OpenAI, OpenRouter, Groq,
     NVIDIA NIM, DeepSeek, Mistral AI, xAI (Grok), or Perplexity (Sonar) —
     or run a model fully locally with Ollama or LM Studio, no key or
-    internet connection required. Pick per-feature in Settings. See
+    internet connection required. Add and verify keys, pick a default
+    provider, and curate which models to use — all from Settings. See
     "AI features" below.
 
 **Not built, deliberately deferred:** real auth — it's a single hardcoded
@@ -92,7 +93,10 @@ dev, configured per-feature in Settings after first launch.
 
 Your data lives in `~/.local/share/Stud-OS/stud_os.db`, untouched by
 re-running the build or updating to a new AppImage — it's created once,
-on first launch, outside the (read-only) AppImage itself.
+on first launch, outside the (read-only) AppImage itself. Every launch
+also runs any pending database migrations against it automatically
+(harmless no-op if already current), so updating to a newer AppImage
+build never leaves an existing install's data on an outdated schema.
 
 ## Testing
 
@@ -121,25 +125,32 @@ The rest (task suggestions, study coach, ask-your-notes) need a
 configured provider — either an API key for a hosted service, or a local
 model server (Ollama/LM Studio) with nothing to configure at all.
 
-The easiest way to add a key: open **Settings** in the app and paste it
-into the provider's key field there — it writes straight into your
-`.env` file for you (never into the database) and takes effect
-immediately, no restart. Editing `.env` by hand still works too, if you
-prefer:
+The easiest way to add a key: open **Settings** in the app, click
+**"+ Add API key"**, pick a provider and paste its key, then hit
+**Connect** — it's tested against the real provider before being saved
+(a bad key is rejected with the actual reason, never silently stored),
+writes straight into your `.env` file (never into the database), and
+takes effect immediately, no restart. Editing `.env` by hand still
+works too, if you prefer:
 ```bash
 cp .env.example .env
 # fill in whichever provider(s) you want, e.g. ANTHROPIC_API_KEY=...
 ```
 
-Then, in **Settings**, connect a provider (paste its key, or nothing to
-do for Ollama/LM Studio) and set one as your **default** — every
-chat-based feature uses that default automatically. Any feature can
-still be pointed at a different connected provider individually if you
-want one thing (say, a paid model for study quizzes) to differ from the
-rest. Supported: Anthropic, Gemini, OpenAI, OpenRouter, Groq, NVIDIA NIM,
-DeepSeek, Mistral AI, xAI (Grok), Perplexity (Sonar), Ollama, LM Studio.
-See `.env.example` for the exact env var names and optional model
-overrides, if you'd rather edit `.env` directly than use Settings.
+Then, in **Settings**, set one connected provider as your **default** —
+every chat-based feature uses that default automatically. Any feature
+can still be pointed at a different connected provider individually if
+you want one thing (say, a paid model for study quizzes) to differ from
+the rest. Any connected provider also has a **"Test connection"**
+button to re-check it's still reachable at any time, and a **"Models"**
+toggle to fetch that provider's live model catalog and add specific
+models to use — the first model added becomes that provider's default
+automatically, and the Ask page lets you pick which added model to use
+per chat. Supported providers: Anthropic, Gemini, OpenAI, OpenRouter,
+Groq, NVIDIA NIM, DeepSeek, Mistral AI, xAI (Grok), Perplexity (Sonar),
+Ollama, LM Studio. See `.env.example` for the exact env var names and
+optional model overrides, if you'd rather edit `.env` directly than use
+Settings.
 
 Ollama and LM Studio run entirely on your own machine — no API key,
 no per-request cost, no data leaving your computer. Install either one,

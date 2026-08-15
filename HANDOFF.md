@@ -824,6 +824,38 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     recognized this as a stale test window, not a bug, and made a fresh
     pair of tasks against current time rather than trusting stale
     fixtures. Committed, pushed, CI green.
+20. **Rebuilt the AppImage, and found a real packaging bug while doing
+    it: an existing install's database never got migrated.** User asked
+    to rebuild, update all the docs, and produce a fresh-session
+    starting prompt. The rebuild itself surfaced something real rather
+    than being a clean formality: launched the freshly-built AppImage
+    against this machine's actual, already-existing data directory
+    (not a throwaway fresh install) and hit a genuine 500 --
+    `no such table: ai_models` -- confirmed via the real backend.log
+    traceback before assuming anything. Root cause: `AppRun` only ever
+    ran `cp seed.db` when no DB file existed yet; it never ran alembic
+    against an *existing* DB on later launches, so any migration added
+    after someone's first install (here, session 18's `ai_models`
+    table) would never reach their real data, only ever a brand-new
+    install's freshly-seeded one. Fixed by running `alembic upgrade
+    head` against `DATABASE_URL` on every launch, right before starting
+    uvicorn -- idempotent, so a no-op on an already-current DB costs
+    nothing -- placed inside the "not already running" branch
+    specifically so it can't race a concurrent instance's DB lock.
+    Split migration output into its own `migrations.log`, since
+    uvicorn's own log redirect was immediately truncating it otherwise.
+    **Live-verified end to end against the real, existing install, not
+    a fresh one**: confirmed the 500 before the fix, rebuilt, relaunched
+    against the exact same data directory, confirmed the endpoint
+    returned 200 and `alembic_version` in the actual `.db` file read the
+    latest revision, and confirmed existing data (notebooks, tasks)
+    survived the migration untouched. 144/144 backend tests pass
+    (unaffected -- packaging-script-only change, no application code).
+    README updated to describe the current state of Settings (key
+    verification, "Test connection", model management) rather than the
+    pre-session-17/18 description it still had, and to note the
+    AppImage now self-migrates on every launch. Committed, pushed, CI
+    green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -1007,17 +1039,20 @@ first" conversation, not a unilateral fix.
 **Packaging (session 12, §4) is done and live-verified**: the app ships
 as a real, working, self-contained AppImage
 (`./packaging/appimage/build.sh` → `Stud-OS-x86_64.AppImage`), one
-process/port, no manual setup on first launch. Not yet done: no macOS or
-Windows packaging (Linux-only for now, matching this machine), and the
-built binary isn't attached anywhere yet -- distribution is via GitHub
-Releases once the app is actually tagged (see the still-open license/
-version-tag decision below). **The AppImage currently sitting in the
-repo root (if one still is) is stale again** -- it was rebuilt in
-session 18 (picking up session 17's key-verification feature) but not
-again after session 18's own model-management/error-message changes or
-session 19's UTC-datetime fix. Check the most recent session in §4
-before assuming the packaged binary matches the code; don't rebuild
-unprompted unless asked.
+process/port, no manual setup on first launch, and now self-migrates an
+existing install's database on every launch too (session 20, §4) so
+updating to a newer build never leaves real data on an outdated schema.
+Not yet done: no macOS or Windows packaging (Linux-only for now,
+matching this machine), and the built binary isn't attached anywhere
+yet -- distribution is via GitHub Releases once actually published (see
+"License and version tag: resolved" below -- that decision itself is
+done, publishing isn't). **The AppImage currently sitting in the repo
+root should be current as of session 20** -- rebuilt and live-verified
+against this machine's real, existing data directory at the end of that
+session. Still worth checking the most recent session in §4 before
+assuming so, though, since any session after 20 that touches
+backend/frontend code without an explicit rebuild will make this stale
+again -- that's the normal state between rebuilds, not a bug.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
