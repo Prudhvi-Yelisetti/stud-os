@@ -77,7 +77,7 @@ that's Aether, not us.
 
 **Testing:**
 ```bash
-.venv/bin/python -m pytest                # 139 tests, isolated temp DB, safe anytime
+.venv/bin/python -m pytest                # 144 tests, isolated temp DB, safe anytime
 .venv/bin/python backend/qa_check.py       # needs a running backend; 30-check e2e smoke test
 cd frontend && npm run build               # tsc + vite build, catches type errors too
 ```
@@ -771,6 +771,59 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     the add-one-first prompt, and separately re-confirmed the cleaned-up
     error message against a real, deliberately-fake Anthropic key.
     Committed, pushed, CI green.
+19. **Found and fixed a real, silent, browser-visible bug: every
+    timestamp lost its UTC marker to the frontend.** User asked to work
+    on "something else -- new feature or bug" again, without naming one
+    -- scoped it by auditing the gamification engine (streaks, levels,
+    badges, penalties), since that code hadn't had a close look in a
+    long time and was flagged historically for exactly this kind of
+    real bug (badge-seeding, priority-sort). Read through
+    `penalties.py`'s overdue-detection query and got suspicious of a
+    `Task.due_at < now` comparison mixing what might be a naive DB value
+    against a tz-aware `datetime.now(timezone.utc)` -- confirmed
+    empirically with a throwaway script *before* assuming anything: a
+    tz-aware datetime written to a `DateTime(timezone=True)` SQLite
+    column round-trips as tz-**naive** on read (a well-known
+    SQLAlchemy+SQLite gotcha), and instance-level Python comparison
+    against it raises `TypeError`. The specific query in
+    `penalties.py` turned out safe (SQLAlchemy `.filter()` builds SQL,
+    not a Python comparison), but chasing the same fact further via a
+    live curl round-trip surfaced the actual bug: the API was
+    serializing every timestamp with **no UTC marker at all**
+    (`"2026-08-14T01:00:00"` instead of `"...+00:00"`) -- and a
+    marker-less ISO string is parsed by JS `new Date(...)` as **local**
+    time, not UTC, per spec. Due-date display and the Kanban board's
+    "overdue" highlighting (§3's "real overdue highlighting" feature)
+    were silently wrong by the browser's UTC offset for anyone not
+    physically in UTC -- this machine included. Traced to
+    `TimestampedMixin`/`SoftDeleteMixin` in `database/base.py` (affects
+    `created_at`/`updated_at` on *every* table, not just tasks) plus
+    `Task`'s three datetime columns -- the only two files in the whole
+    codebase using `DateTime(timezone=True)`, confirmed by grep before
+    fixing anything so the fix wouldn't miss a table. Fixed once,
+    centrally, with a new `UTCDateTime` `TypeDecorator` (re-attaches UTC
+    tzinfo on read, normalizes writes to UTC) rather than patching call
+    sites -- same "fix it at the source, not every place it surfaces"
+    reasoning as `friendly_error()` and `list_models()`/`verify()` in
+    session 18. Confirmed via `alembic check` that no migration was
+    needed (identical underlying SQL column type, purely a Python-level
+    read/write behavior change) before assuming that and moving on.
+    144/144 backend tests pass (5 new, exercising the real HTTP API
+    round-trip, not constructed in memory, including that the
+    overdue-penalty query still correctly detects a genuinely overdue
+    task after the change). **Live-verified in a real browser, the part
+    that actually mattered** -- created one task due 2 hours in the past
+    and one due 6 hours in the future as real UTC timestamps, confirmed
+    the Kanban board correctly showed "Overdue: 8/15/2026" on the first
+    and plain "Due 8/15/2026" (not overdue) on the second. Hit a
+    real-time-elapsed gotcha mid-verification worth remembering: a
+    session interruption (background processes died, matching the
+    usual container-reset pattern) meant enough wall-clock time passed
+    that the *original* "future" test task's due date had for real
+    become past by the time the browser check ran -- correctly
+    recognized this as a stale test window, not a bug, and made a fresh
+    pair of tasks against current time rather than trusting stale
+    fixtures. Committed, pushed, CI green.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -808,7 +861,7 @@ backend/
   gamification/          xp_rules, engine, levels, badges, streaks, penalties
   utils/                 wiki_parser, recurrence
   alembic/versions/      migrations, applied in order
-  tests/                 pytest suite (139 tests), isolated temp-DB fixture
+  tests/                 pytest suite (144 tests), isolated temp-DB fixture
   qa_check.py             e2e smoke test against a live server
   dependencies.py         get_current_user (single hardcoded user, race-safe)
 
@@ -961,10 +1014,10 @@ Releases once the app is actually tagged (see the still-open license/
 version-tag decision below). **The AppImage currently sitting in the
 repo root (if one still is) is stale again** -- it was rebuilt in
 session 18 (picking up session 17's key-verification feature) but not
-again after session 18's own model-management/error-message changes,
-since that work happened *after* the rebuild in the same session. Check
-the most recent session in §4 before assuming the packaged binary
-matches the code; don't rebuild unprompted unless asked.
+again after session 18's own model-management/error-message changes or
+session 19's UTC-datetime fix. Check the most recent session in §4
+before assuming the packaged binary matches the code; don't rebuild
+unprompted unless asked.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
@@ -997,6 +1050,14 @@ provider is currently active. If a future provider adapter gets added,
 it needs a real `list_models()` too (`verify()` is built on it now, not
 separate) -- same "don't stub this out" reasoning session 17 already
 established for `verify()` itself.
+
+**Every timestamp is correctly UTC-marked now (session 19, §4)**: see
+`UTCDateTime` in `database/base.py`. If a future model adds its own raw
+`DateTime(timezone=True)` column instead of going through
+`TimestampedMixin`/`UTCDateTime`, it'll silently reintroduce this exact
+bug for that one column -- grep for `DateTime(timezone=True)` before
+assuming a new datetime column is safe, or just use `UTCDateTime`
+directly.
 
 Beyond that, nothing is currently broken or half-done. If the user
 reports something feels off, the established pattern (see §4) is: look
