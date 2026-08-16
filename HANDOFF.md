@@ -856,6 +856,45 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     pre-session-17/18 description it still had, and to note the
     AppImage now self-migrates on every launch. Committed, pushed, CI
     green.
+21. **Wired attachments into Journal and Projects, closing a gap flagged
+    (but not acted on) since session 16.** User asked to scope the
+    session myself. Opened by stopping the AppImage that was running
+    live in the user's browser (confirmed it was genuinely idle before
+    touching it, same courtesy as session 13) so the dev backend could
+    use port 8420, then started fresh dev servers -- no stale processes,
+    no container-reset signs this time. Picked the target by re-reading
+    session 16's honest "what's missing" answer rather than inventing
+    new busywork: "attachments only work on Notes despite the backend
+    allowing them on journal/project too" was named there and never
+    followed up on. Confirmed it was real before touching anything --
+    `ALLOWED_OWNER_TYPES` in `routers/attachments.py` has included
+    `project` and `journal` since session 15's orphaned-attachment fix,
+    and `AttachmentPanel.tsx` already took a generic
+    `chapter | project | journal` prop -- but `grep`ping every `.tsx`
+    file showed it was only ever imported into `ChapterEditor`. This was
+    a pure frontend wiring gap, zero backend changes needed. Added
+    `<AttachmentPanel ownerType="project">` to the project detail view
+    (between description and Tasks) and `<AttachmentPanel
+    ownerType="journal">` to each journal entry card. 144/144 backend
+    tests pass, unchanged (frontend-only diff); `npm run build` clean.
+    **Live-verified in a real browser, both new surfaces, including the
+    cascade-delete path this reuses from session 15**: created a real
+    project, uploaded a real file through the new panel, confirmed it
+    listed with a working download link, removed it and confirmed the
+    file actually left `backend/uploads/`; created a real journal entry,
+    uploaded a file to it, then specifically exercised the soft-delete →
+    Trash → permanent-delete path (not just a direct removal) and
+    confirmed the file was still present while the entry sat in Trash
+    (soft delete correctly leaves attachments alone) and was gone from
+    disk only after "Delete forever" -- proving `delete_attachments_for`
+    fires correctly for these two owner types via the real trash flow,
+    not just in the unit tests session 15 already wrote for it. All test
+    data (project, journal entry, uploaded file) cleaned up afterward,
+    confirmed via `GET /api/trash` returning empty and `uploads/` empty.
+    No Desktop Commander drops this session. Committed, pushed, CI
+    green. **AppImage not rebuilt** -- not asked for this time (now one
+    session behind: missing this fix on top of already being one behind
+    from session 20 being the last rebuild).
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -1047,12 +1086,13 @@ matching this machine), and the built binary isn't attached anywhere
 yet -- distribution is via GitHub Releases once actually published (see
 "License and version tag: resolved" below -- that decision itself is
 done, publishing isn't). **The AppImage currently sitting in the repo
-root should be current as of session 20** -- rebuilt and live-verified
-against this machine's real, existing data directory at the end of that
-session. Still worth checking the most recent session in §4 before
-assuming so, though, since any session after 20 that touches
-backend/frontend code without an explicit rebuild will make this stale
-again -- that's the normal state between rebuilds, not a bug.
+root is stale as of session 21** -- it still reflects session 20's
+rebuild, so it's missing session 21's Journal/Projects attachments UI.
+Rebuild before relying on the packaged app reflecting the current
+frontend. Still worth checking the most recent session in §4 before
+assuming staleness or freshness, though, since this note itself goes
+stale the moment another session touches backend/frontend code without
+rebuilding -- that's the normal state between rebuilds, not a bug.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
@@ -1073,6 +1113,18 @@ than the specific fix: `Attachment` and `Chunk` are both polymorphic
 built the same way in the future needs the same explicit cleanup on
 permanent delete -- it will not cascade automatically just because a
 "real" model like Chapter or Notebook does.
+
+**Attachments now work on Journal and Projects too, not just Notes
+(session 21, §4)**: this was a pure frontend gap -- the backend and the
+`AttachmentPanel` component were already generic across all three owner
+types since session 15, just never rendered outside `ChapterEditor`.
+Fixed by adding the panel to `ProjectsView` and `JournalView`; no backend
+change. If a fourth attachable entity type is ever added, remember it
+needs three things to actually work end-to-end, not just the backend
+piece: added to `ALLOWED_OWNER_TYPES`, wired into `delete_attachments_for`
+callers in `trash.py`, and an actual `<AttachmentPanel>` rendered
+somewhere in that entity's own UI -- this session is a reminder that the
+first two being done doesn't guarantee the third followed.
 
 **Model management exists now (session 18, §4)**: each connected
 provider has its own curated list of added models (Settings' "Models ▾"
