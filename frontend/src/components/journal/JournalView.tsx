@@ -6,6 +6,7 @@ import type { Mood } from '../../lib/api'
 import { WikiLinkText } from '../shared/WikiLinkText'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { MoodHeatmap } from './MoodHeatmap'
+import { AttachmentPanel } from '../attachments/AttachmentPanel'
 
 const MOOD_EMOJI: Record<Mood, string> = {
   great: '🤩',
@@ -205,6 +206,7 @@ export function JournalView() {
                   </div>
                 </div>
                 <JournalEntryContent content={entry.content} />
+                <AttachmentPanel ownerType="journal" ownerId={entry.id} />
               </div>
             ),
           )}

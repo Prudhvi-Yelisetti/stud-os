@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { projectsApi } from '../../lib/projects'
 import type { Project } from '../../lib/api'
+import { AttachmentPanel } from '../attachments/AttachmentPanel'
 
 export function ProjectsView() {
   const queryClient = useQueryClient()
@@ -153,7 +154,8 @@ export function ProjectsView() {
               rows={2}
               className="mb-4 w-full resize-none rounded bg-neutral-900 p-2 text-sm text-neutral-300 outline-none placeholder:text-neutral-600"
             />
-            <h2 className="mb-2 text-sm font-medium text-neutral-400">Tasks</h2>
+            {selectedId && <AttachmentPanel ownerType="project" ownerId={selectedId} />}
+            <h2 className="mb-4 mt-4 text-sm font-medium text-neutral-400">Tasks</h2>
             <div className="flex flex-col gap-2">
               {projectTasks?.map((t) => (
                 <div key={t.id} className="rounded bg-neutral-900 px-3 py-2 text-sm">
