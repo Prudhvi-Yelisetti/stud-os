@@ -19,6 +19,10 @@ export interface Chapter {
   content: string
   pinned: boolean
   version: number
+  is_template: boolean
+  is_daily_template: boolean
+  properties: Record<string, unknown>
+  tags: string[]
   created_at: string
   updated_at: string
 }
@@ -70,6 +74,8 @@ export interface JournalEntry {
   content: string
   mood: Mood | null
   entry_date: string
+  properties: Record<string, unknown>
+  tags: string[]
   created_at: string
   updated_at: string
 }
@@ -233,4 +239,16 @@ export interface TrashedItem {
   id: string
   title: string
   trashed_at: string | null
+}
+
+export interface TagCount {
+  name: string
+  count: number
+}
+
+export interface TaggedItem {
+  type: 'chapter' | 'journal'
+  id: string
+  title: string
+  notebook_id: string | null
 }

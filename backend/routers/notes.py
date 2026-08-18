@@ -15,10 +15,14 @@ from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.schemas.notes import (
     NotebookCreate, NotebookUpdate, NotebookOut,
-    ChapterCreate, ChapterUpdate, ChapterOut, BacklinkOut, ChapterTitleMatch, ChapterVersionOut,
+    ChapterCreate, ChapterUpdate, ChapterOut, ChapterPropertiesUpdate,
+    BacklinkOut, ChapterTitleMatch, ChapterVersionOut,
 )
 from backend.utils.wiki_parser import extract_wiki_links
+from backend.utils.frontmatter import parse_frontmatter, serialize_frontmatter
+from backend.utils.templates import interpolate
 from backend.ai.indexing import reindex
+from backend.tag_indexing import reindex_tags
 
 router = APIRouter(prefix="/api/notebooks", tags=["notes"])
 
@@ -166,6 +170,22 @@ def _sync_wiki_links(db: Session, chapter: Chapter) -> None:
             db.add(ChapterLink(from_chapter_id=chapter.id, to_chapter_id=target.id))
 
 
+def create_chapter_record(db: Session, *, notebook_id: str, title: str, content: str = "") -> Chapter:
+    """Shared chapter-creation path: insert, sync wiki-links, reindex for
+    search and tags. Used by the plain create_chapter endpoint below and
+    by anything else that creates a chapter programmatically (templates,
+    daily notes) so none of those paths can drift out of sync with it."""
+    ch = Chapter(notebook_id=notebook_id, title=title, content=content)
+    db.add(ch)
+    db.commit()
+    db.refresh(ch)
+    _sync_wiki_links(db, ch)
+    _reindex_chapter(db, ch)
+    reindex_tags(db, taggable_type="chapter", taggable_id=ch.id, content=ch.content)
+    db.commit()
+    return ch
+
+
 @router.get("/{notebook_id}/chapters", response_model=list[ChapterOut])
 def list_chapters(
     notebook_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
@@ -187,14 +207,7 @@ def create_chapter(
     user: User = Depends(get_current_user),
 ):
     _get_notebook_or_404(db, notebook_id, user)
-    ch = Chapter(notebook_id=notebook_id, title=payload.title, content=payload.content)
-    db.add(ch)
-    db.commit()
-    db.refresh(ch)
-    _sync_wiki_links(db, ch)
-    _reindex_chapter(db, ch)
-    db.commit()
-    return ch
+    return create_chapter_record(db, notebook_id=notebook_id, title=payload.title, content=payload.content)
 
 
 @router.get("/chapters/recent", response_model=list[ChapterOut])
@@ -234,6 +247,39 @@ def search_chapter_titles(
     )
 
 
+@router.get("/chapters/templates", response_model=list[ChapterOut])
+def list_templates(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Chapters marked is_template=True, across all notebooks -- powers
+    the "New from template" picker. Must be declared before the
+    /chapters/{chapter_id} route below or FastAPI would match "templates"
+    as a chapter_id (same reasoning as /chapters/recent and /search)."""
+    return (
+        db.query(Chapter)
+        .join(Notebook, Notebook.id == Chapter.notebook_id)
+        .filter(Notebook.user_id == user.id, Chapter.is_trashed.is_(False), Chapter.is_template.is_(True))
+        .order_by(Chapter.title)
+        .all()
+    )
+
+
+@router.post("/{notebook_id}/chapters/from-template/{template_id}", response_model=ChapterOut, status_code=201)
+def create_chapter_from_template(
+    notebook_id: str,
+    template_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _get_notebook_or_404(db, notebook_id, user)
+    template = _get_chapter_or_404(db, template_id)
+    if not template.is_template:
+        raise HTTPException(status_code=400, detail="Chapter is not marked as a template")
+
+    now = datetime.now()
+    title = interpolate(template.title, now).strip() or "Untitled"
+    content = interpolate(template.content, now)
+    return create_chapter_record(db, notebook_id=notebook_id, title=title, content=content)
+
+
 @router.get("/chapters/{chapter_id}", response_model=ChapterOut)
 def get_chapter(chapter_id: str, db: Session = Depends(get_db)):
     return _get_chapter_or_404(db, chapter_id)
@@ -251,14 +297,47 @@ def update_chapter(chapter_id: str, payload: ChapterUpdate, db: Session = Depend
     for field, value in data.items():
         setattr(ch, field, value)
 
+    # At most one chapter is the daily template at a time -- unset any
+    # other one that currently holds it (mirrors the "exactly one default
+    # model" invariant from the AI-models settings page).
+    if data.get("is_daily_template") is True:
+        db.query(Chapter).filter(Chapter.id != ch.id, Chapter.is_daily_template.is_(True)).update(
+            {"is_daily_template": False}
+        )
+
     db.commit()
     db.refresh(ch)
 
     if "content" in data:
         _sync_wiki_links(db, ch)
+        reindex_tags(db, taggable_type="chapter", taggable_id=ch.id, content=ch.content)
 
     if "content" in data or "title" in data:
         _reindex_chapter(db, ch)
+        db.commit()
+
+    return ch
+
+
+@router.patch("/chapters/{chapter_id}/properties", response_model=ChapterOut)
+def update_chapter_properties(chapter_id: str, payload: ChapterPropertiesUpdate, db: Session = Depends(get_db)):
+    """Rewrites the chapter's frontmatter block to match `properties`,
+    keeping the body untouched, and saves it as a normal content edit
+    (version-snapshotted, wiki-links and tags re-synced) -- properties
+    aren't a separate store, they live in content like everything else."""
+    ch = _get_chapter_or_404(db, chapter_id)
+    _, body = parse_frontmatter(ch.content)
+    new_content = serialize_frontmatter(payload.properties, body)
+
+    if new_content != ch.content:
+        db.add(ChapterVersion(chapter_id=ch.id, content_snapshot=ch.content, version_number=ch.version))
+        ch.version += 1
+        ch.content = new_content
+        db.commit()
+        db.refresh(ch)
+        _sync_wiki_links(db, ch)
+        _reindex_chapter(db, ch)
+        reindex_tags(db, taggable_type="chapter", taggable_id=ch.id, content=ch.content)
         db.commit()
 
     return ch
@@ -353,5 +432,6 @@ def restore_chapter_version(chapter_id: str, version_id: str, db: Session = Depe
 
     _sync_wiki_links(db, ch)
     _reindex_chapter(db, ch)
+    reindex_tags(db, taggable_type="chapter", taggable_id=ch.id, content=ch.content)
     db.commit()
     return ch

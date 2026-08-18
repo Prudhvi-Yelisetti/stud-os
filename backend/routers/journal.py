@@ -7,8 +7,12 @@ from backend.database.session import get_db
 from backend.database.models.journal import JournalEntry
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
-from backend.schemas.journal import JournalEntryCreate, JournalEntryUpdate, JournalEntryOut
+from backend.schemas.journal import (
+    JournalEntryCreate, JournalEntryUpdate, JournalEntryOut, JournalEntryPropertiesUpdate,
+)
+from backend.utils.frontmatter import parse_frontmatter, serialize_frontmatter
 from backend.ai.indexing import reindex
+from backend.tag_indexing import reindex_tags
 
 router = APIRouter(prefix="/api/journal", tags=["journal"])
 
@@ -54,6 +58,7 @@ def create_entry(
     db.commit()
     db.refresh(entry)
     _reindex_entry(db, entry)
+    reindex_tags(db, taggable_type="journal", taggable_id=entry.id, content=entry.content)
     db.commit()
     return entry
 
@@ -73,7 +78,34 @@ def update_entry(
     db.refresh(entry)
     if "content" in data or "title" in data:
         _reindex_entry(db, entry)
+    if "content" in data:
+        reindex_tags(db, taggable_type="journal", taggable_id=entry.id, content=entry.content)
+    if "content" in data or "title" in data:
         db.commit()
+    return entry
+
+
+@router.patch("/{entry_id}/properties", response_model=JournalEntryOut)
+def update_entry_properties(
+    entry_id: str,
+    payload: JournalEntryPropertiesUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Same shape as ChapterOut's properties endpoint -- rewrites the
+    frontmatter block in content, keeps body untouched."""
+    entry = _get_entry_or_404(db, entry_id, user)
+    _, body = parse_frontmatter(entry.content)
+    new_content = serialize_frontmatter(payload.properties, body)
+
+    if new_content != entry.content:
+        entry.content = new_content
+        db.commit()
+        db.refresh(entry)
+        _reindex_entry(db, entry)
+        reindex_tags(db, taggable_type="journal", taggable_id=entry.id, content=entry.content)
+        db.commit()
+
     return entry
 
 

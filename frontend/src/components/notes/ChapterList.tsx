@@ -4,6 +4,8 @@ import { notebooksApi } from '../../lib/notebooks'
 import type { Chapter } from '../../lib/api'
 import { DropdownMenu } from '../shared/DropdownMenu'
 import { ChapterFormModal } from './ChapterFormModal'
+import { TemplatePickerModal } from './TemplatePickerModal'
+import { stripFrontmatter } from '../../lib/frontmatter'
 
 export function ChapterList({
   notebookId,
@@ -20,6 +22,7 @@ export function ChapterList({
   const [query, setQuery] = useState('')
   const [modalMode, setModalMode] = useState<'create' | null>(null)
   const [editingChapter, setEditingChapter] = useState<Chapter | null>(null)
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   const { data: chapters } = useQuery({
     queryKey: ['chapters', notebookId],
@@ -51,6 +54,15 @@ export function ChapterList({
     onSuccess: (_data, id) => {
       invalidate()
       if (id === selectedId) onSelect('')
+    },
+  })
+
+  const createFromTemplate = useMutation({
+    mutationFn: (templateId: string) => notebooksApi.createChapterFromTemplate(notebookId, templateId),
+    onSuccess: (ch) => {
+      invalidate()
+      onSelect(ch.id)
+      setShowTemplatePicker(false)
     },
   })
 
@@ -87,6 +99,13 @@ export function ChapterList({
           submitting={updateChapter.isPending}
         />
       )}
+      {showTemplatePicker && (
+        <TemplatePickerModal
+          onPick={(templateId) => createFromTemplate.mutate(templateId)}
+          onClose={() => setShowTemplatePicker(false)}
+          submitting={createFromTemplate.isPending}
+        />
+      )}
     </>
   )
 
@@ -95,13 +114,22 @@ export function ChapterList({
       <div className="p-6">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-medium text-neutral-300">Chapters</h2>
-          <button
-            onClick={() => setModalMode('create')}
-            className="rounded px-2 py-1 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
-            title="New chapter"
-          >
-            + New
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setShowTemplatePicker(true)}
+              className="rounded px-2 py-1 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+              title="New from template"
+            >
+              From template
+            </button>
+            <button
+              onClick={() => setModalMode('create')}
+              className="rounded px-2 py-1 text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+              title="New chapter"
+            >
+              + New
+            </button>
+          </div>
         </div>
         <input
           value={query}
@@ -122,7 +150,9 @@ export function ChapterList({
                   {ch.pinned ? '📌 ' : ''}
                   {ch.title}
                 </div>
-                {ch.content && <p className="line-clamp-2 text-sm text-neutral-500">{ch.content}</p>}
+                {ch.content && (
+                  <p className="line-clamp-2 text-sm text-neutral-500">{stripFrontmatter(ch.content)}</p>
+                )}
               </button>
               <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100">
                 <DropdownMenu items={menuItemsFor(ch)} />
@@ -145,13 +175,22 @@ export function ChapterList({
     <div className="w-64 shrink-0 border-r border-neutral-800 p-3">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-medium text-neutral-400">Chapters</h2>
-        <button
-          onClick={() => setModalMode('create')}
-          className="rounded px-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300"
-          title="New chapter"
-        >
-          +
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowTemplatePicker(true)}
+            className="rounded px-1.5 text-xs text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300"
+            title="New from template"
+          >
+            📋
+          </button>
+          <button
+            onClick={() => setModalMode('create')}
+            className="rounded px-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-neutral-300"
+            title="New chapter"
+          >
+            +
+          </button>
+        </div>
       </div>
       <input
         value={query}

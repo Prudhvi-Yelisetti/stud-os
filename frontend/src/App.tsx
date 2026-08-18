@@ -12,6 +12,7 @@ const TasksPage = lazy(() => import('./pages/TasksPage').then((m) => ({ default:
 const JournalPage = lazy(() => import('./pages/JournalPage').then((m) => ({ default: m.JournalPage })))
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })))
 const GraphPage = lazy(() => import('./pages/GraphPage').then((m) => ({ default: m.GraphPage })))
+const TagsPage = lazy(() => import('./pages/TagsPage').then((m) => ({ default: m.TagsPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const TimelinePage = lazy(() => import('./pages/TimelinePage').then((m) => ({ default: m.TimelinePage })))
 const TrashPage = lazy(() => import('./pages/TrashPage').then((m) => ({ default: m.TrashPage })))
@@ -37,6 +38,8 @@ function App() {
               <Route path="/journal" element={<JournalPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/graph" element={<GraphPage />} />
+              <Route path="/tags" element={<TagsPage />} />
+              <Route path="/tags/:tagName" element={<TagsPage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/trash" element={<TrashPage />} />
               <Route path="/settings" element={<SettingsPage />} />

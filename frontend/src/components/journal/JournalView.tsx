@@ -7,6 +7,8 @@ import { WikiLinkText } from '../shared/WikiLinkText'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { MoodHeatmap } from './MoodHeatmap'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
+import { PropertiesPanel } from '../shared/PropertiesPanel'
+import { stripFrontmatter } from '../../lib/frontmatter'
 
 const MOOD_EMOJI: Record<Mood, string> = {
   great: '🤩',
@@ -28,9 +30,10 @@ function JournalEntryContent({ content }: { content: string }) {
 
   return (
     <WikiLinkText
-      content={content}
+      content={stripFrontmatter(content)}
       resolvedLinks={resolvedLinks}
       onResolvedClick={(resolved) => navigate(`/notes?chapter=${resolved.id}`)}
+      onTagClick={(tag) => navigate(`/tags/${encodeURIComponent(tag)}`)}
     />
   )
 }
@@ -76,6 +79,12 @@ export function JournalView() {
 
   const deleteEntry = useMutation({
     mutationFn: (id: string) => journalApi.remove(id),
+    onSuccess: invalidate,
+  })
+
+  const saveProperties = useMutation({
+    mutationFn: ({ id, properties }: { id: string; properties: Record<string, unknown> }) =>
+      journalApi.updateProperties(id, properties),
     onSuccess: invalidate,
   })
 
@@ -207,6 +216,10 @@ export function JournalView() {
                 </div>
                 <JournalEntryContent content={entry.content} />
                 <AttachmentPanel ownerType="journal" ownerId={entry.id} />
+                <PropertiesPanel
+                  properties={entry.properties}
+                  onSave={(properties) => saveProperties.mutate({ id: entry.id, properties })}
+                />
               </div>
             ),
           )}

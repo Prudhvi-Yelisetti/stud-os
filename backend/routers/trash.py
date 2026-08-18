@@ -13,6 +13,7 @@ from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.ai.indexing import delete_chunks_for
 from backend.routers.attachments import delete_attachments_for
+from backend.tag_indexing import delete_tag_links_for
 
 router = APIRouter(prefix="/api/trash", tags=["trash"])
 
@@ -23,6 +24,10 @@ _INDEXED_TYPES = {"chapter", "journal"}
 # Mirrors ALLOWED_OWNER_TYPES in routers/attachments.py -- the trashable
 # types that can actually have attachments. ("notebook" and "task" can't.)
 _ATTACHABLE_TYPES = {"chapter", "project", "journal"}
+
+# Mirrors _INDEXED_TYPES -- the trashable types that can actually carry
+# tags (taggable_type values written by tag_indexing.reindex_tags()).
+_TAGGABLE_TYPES = {"chapter", "journal"}
 
 TRASHABLE = {
     "notebook": Notebook,
@@ -114,15 +119,19 @@ def permanently_delete(item_type: str, item_id: str, db: Session = Depends(get_d
         delete_chunks_for(db, parent_type=item_type, parent_id=item.id)
     if item_type in _ATTACHABLE_TYPES:
         delete_attachments_for(db, owner_type=item_type, owner_id=item.id)
+    if item_type in _TAGGABLE_TYPES:
+        delete_tag_links_for(db, taggable_type=item_type, taggable_id=item.id)
     if item_type == "notebook":
         # Chapters cascade-delete via the ORM relationship, but their
-        # Chunk and Attachment rows don't (both are polymorphic, not real
-        # FK relations) -- clean those up explicitly or they'd become
-        # orphaned vectors and files with no way to reach them again.
+        # Chunk, Attachment, and TagLink rows don't (all three are
+        # polymorphic, not real FK relations) -- clean those up
+        # explicitly or they'd become orphaned vectors, files, and tag
+        # links with no way to reach them again.
         chapter_ids = [c.id for c in db.query(Chapter).filter(Chapter.notebook_id == item.id).all()]
         for chapter_id in chapter_ids:
             delete_chunks_for(db, parent_type="chapter", parent_id=chapter_id)
             delete_attachments_for(db, owner_type="chapter", owner_id=chapter_id)
+            delete_tag_links_for(db, taggable_type="chapter", taggable_id=chapter_id)
 
     db.delete(item)
     db.commit()

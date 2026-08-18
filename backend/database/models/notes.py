@@ -22,6 +22,10 @@ class Chapter(Base, UUIDPKMixin, TimestampedMixin, SoftDeleteMixin):
     content: Mapped[str] = mapped_column(Text, default="", nullable=False)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # At most one chapter has this set True at a time -- enforced in
+    # routers/notes.py's update_chapter, not at the schema level.
+    is_daily_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     notebook: Mapped["Notebook"] = relationship(back_populates="chapters")
     versions: Mapped[list["ChapterVersion"]] = relationship(

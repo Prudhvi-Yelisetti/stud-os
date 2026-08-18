@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { notebooksApi } from '../../lib/notebooks'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
+import { PropertiesPanel } from '../shared/PropertiesPanel'
 import { WikiLinkText } from '../shared/WikiLinkText'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { detectActiveWikiLinkQuery } from '../../lib/wikiLinks'
+import { stripFrontmatter } from '../../lib/frontmatter'
 import { VersionHistoryPanel } from './VersionHistoryPanel'
 import { RelatedNotesPanel } from './RelatedNotesPanel'
 import { QuizPanel } from './QuizPanel'
@@ -19,6 +22,7 @@ export function ChapterEditor({
   onNavigate: (notebookId: string, chapterId: string) => void
 }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [content, setContent] = useState('')
   const [mode, setMode] = useState<'edit' | 'preview'>('edit')
   const [editingTitle, setEditingTitle] = useState(false)
@@ -66,6 +70,21 @@ export function ChapterEditor({
     onSuccess: invalidateChapterLists,
   })
 
+  const toggleTemplate = useMutation({
+    mutationFn: (is_template: boolean) => notebooksApi.updateChapter(chapterId, { is_template }),
+    onSuccess: invalidateChapterLists,
+  })
+
+  const toggleDailyTemplate = useMutation({
+    mutationFn: (is_daily_template: boolean) => notebooksApi.updateChapter(chapterId, { is_daily_template }),
+    onSuccess: invalidateChapterLists,
+  })
+
+  const saveProperties = useMutation({
+    mutationFn: (properties: Record<string, unknown>) => notebooksApi.updateChapterProperties(chapterId, properties),
+    onSuccess: invalidateChapterLists,
+  })
+
   const deleteChapter = useMutation({
     mutationFn: () => notebooksApi.deleteChapter(chapterId),
     onSuccess: () => {
@@ -83,6 +102,10 @@ export function ChapterEditor({
 
   function handleResolvedClick(resolved: { id: string; notebook_id: string }) {
     onNavigate(resolved.notebook_id, resolved.id)
+  }
+
+  function handleTagClick(tag: string) {
+    navigate(`/tags/${encodeURIComponent(tag)}`)
   }
 
   function handleUnresolvedClick(title: string) {
@@ -141,6 +164,26 @@ export function ChapterEditor({
         <p className="text-sm text-neutral-600">No backlinks yet.</p>
       )}
       <AttachmentPanel ownerType="chapter" ownerId={chapterId} />
+      <PropertiesPanel properties={chapter.properties} onSave={(props) => saveProperties.mutate(props)} />
+      <div className="mt-4 border-t border-neutral-800 pt-3">
+        <h3 className="mb-2 text-xs font-medium text-neutral-500">Template</h3>
+        <label className="mb-1 flex items-center gap-2 text-xs text-neutral-400">
+          <input
+            type="checkbox"
+            checked={chapter.is_template}
+            onChange={(e) => toggleTemplate.mutate(e.target.checked)}
+          />
+          Use as template
+        </label>
+        <label className="flex items-center gap-2 text-xs text-neutral-400">
+          <input
+            type="checkbox"
+            checked={chapter.is_daily_template}
+            onChange={(e) => toggleDailyTemplate.mutate(e.target.checked)}
+          />
+          Use for daily notes
+        </label>
+      </div>
       <RelatedNotesPanel chapterId={chapterId} />
       <QuizPanel chapterId={chapterId} />
     </>
@@ -257,10 +300,11 @@ export function ChapterEditor({
         ) : (
           <div className="h-[calc(100%-3rem)] w-full overflow-y-auto rounded bg-neutral-900 p-4">
             <WikiLinkText
-              content={content}
+              content={stripFrontmatter(content)}
               resolvedLinks={resolvedLinks}
               onResolvedClick={handleResolvedClick}
               onUnresolvedClick={handleUnresolvedClick}
+              onTagClick={handleTagClick}
               emptyPlaceholder="Nothing written yet."
             />
           </div>

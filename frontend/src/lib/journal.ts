@@ -6,5 +6,7 @@ export const journalApi = {
     api.post<JournalEntry>('/journal', data).then((r) => r.data),
   update: (id: string, data: Partial<Pick<JournalEntry, 'title' | 'content' | 'mood'>>) =>
     api.patch<JournalEntry>(`/journal/${id}`, data).then((r) => r.data),
+  updateProperties: (id: string, properties: Record<string, unknown>) =>
+    api.patch<JournalEntry>(`/journal/${id}/properties`, { properties }).then((r) => r.data),
   remove: (id: string) => api.delete(`/journal/${id}`),
 }

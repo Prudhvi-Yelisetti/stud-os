@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { GamificationWidget } from '../gamification/GamificationWidget'
 import { GlobalSearch } from '../search/GlobalSearch'
+import { dailyNotesApi } from '../../lib/dailyNotes'
 
 const navItems = [
   { to: '/', label: 'Dashboard' },
@@ -10,6 +11,7 @@ const navItems = [
   { to: '/journal', label: 'Journal' },
   { to: '/projects', label: 'Projects' },
   { to: '/graph', label: 'Graph' },
+  { to: '/tags', label: 'Tags' },
   { to: '/timeline', label: 'Timeline' },
   { to: '/trash', label: 'Trash' },
   { to: '/ask', label: 'Ask' },
@@ -19,6 +21,7 @@ const navItems = [
 export function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
 
   // Close the drawer automatically on navigation instead of requiring an
   // explicit tap outside it -- the common mobile-nav pattern.
@@ -67,6 +70,13 @@ export function AppLayout() {
             ☰
           </button>
           <div className="flex-1 md:hidden" />
+          <button
+            onClick={() => dailyNotesApi.today().then((ch) => navigate(`/notes?chapter=${ch.id}`))}
+            className="rounded px-2 py-1 text-sm text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+            title="Open today's daily note"
+          >
+            📅 Today
+          </button>
           <div className="ml-auto">
             <GlobalSearch />
           </div>

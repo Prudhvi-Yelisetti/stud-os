@@ -15,8 +15,12 @@ export const notebooksApi = {
     api.post<Chapter>(`/notebooks/${notebookId}/chapters`, data).then((r) => r.data),
   getChapter: (chapterId: string) =>
     api.get<Chapter>(`/notebooks/chapters/${chapterId}`).then((r) => r.data),
-  updateChapter: (chapterId: string, data: Partial<Pick<Chapter, 'title' | 'content' | 'pinned'>>) =>
-    api.patch<Chapter>(`/notebooks/chapters/${chapterId}`, data).then((r) => r.data),
+  updateChapter: (
+    chapterId: string,
+    data: Partial<Pick<Chapter, 'title' | 'content' | 'pinned' | 'is_template' | 'is_daily_template'>>,
+  ) => api.patch<Chapter>(`/notebooks/chapters/${chapterId}`, data).then((r) => r.data),
+  updateChapterProperties: (chapterId: string, properties: Record<string, unknown>) =>
+    api.patch<Chapter>(`/notebooks/chapters/${chapterId}/properties`, { properties }).then((r) => r.data),
   deleteChapter: (chapterId: string) => api.delete(`/notebooks/chapters/${chapterId}`),
   getBacklinks: (chapterId: string) =>
     api.get<Backlink[]>(`/notebooks/chapters/${chapterId}/backlinks`).then((r) => r.data),
@@ -24,6 +28,9 @@ export const notebooksApi = {
     api.get<Chapter[]>('/notebooks/chapters/recent', { params: { limit } }).then((r) => r.data),
   searchChapterTitles: (q: string) =>
     api.get<ChapterTitleMatch[]>('/notebooks/chapters/search', { params: { q } }).then((r) => r.data),
+  listTemplates: () => api.get<Chapter[]>('/notebooks/chapters/templates').then((r) => r.data),
+  createChapterFromTemplate: (notebookId: string, templateId: string) =>
+    api.post<Chapter>(`/notebooks/${notebookId}/chapters/from-template/${templateId}`).then((r) => r.data),
   listVersions: (chapterId: string) =>
     api.get<ChapterVersion[]>(`/notebooks/chapters/${chapterId}/versions`).then((r) => r.data),
   restoreVersion: (chapterId: string, versionId: string) =>
