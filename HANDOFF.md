@@ -895,6 +895,125 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     green. **AppImage not rebuilt** -- not asked for this time (now one
     session behind: missing this fix on top of already being one behind
     from session 20 being the last rebuild).
+22. **User asked to make Stud-OS "do everything Obsidian does."** This
+    needed pushback before any code, not after: Obsidian is a mature app
+    built on a different foundation (plain markdown files as the source
+    of truth, a community plugin ecosystem built over years) and full
+    parity isn't a realistic scope for any single session. Laid out an
+    honest gap analysis first (what's structurally different vs what's
+    buildable as features), then had the user pick priorities rather
+    than guessing: they picked all of tags/frontmatter, templates/daily
+    notes, embeds, canvas, and live-preview editing as things they
+    wanted eventually, then explicitly scoped *this session* to 1-2 of
+    them, built fully and tested. Picked tags/properties + templates/
+    daily-notes myself since embeds risked frontmatter-parsing edge
+    cases better done after this session (see below) and canvas/
+    live-preview are bigger, riskier undertakings (canvas is a new page
+    type; live-preview means replacing the editor) better scoped on
+    their own rather than folded in here.
+
+    **Tags & frontmatter properties.** Found something genuinely
+    interesting on the way in: `Tag`/`TagLink` tables already existed in
+    the DB (migration `ed0790e1dedf`, "add tags, projects, tasks,
+    journal, gamification") and the SQLAlchemy models were already
+    imported in `models/__init__.py` -- scaffolded during the original
+    rebuild and then completely unused ever since, not mentioned
+    anywhere in this file. Built the real feature on top of those
+    tables rather than adding new ones. `backend/utils/frontmatter.py`
+    parses/serializes a YAML frontmatter block at the top of
+    chapter/journal `content` -- frontmatter lives IN content, same
+    philosophy as Obsidian's plain-file model, so there's no separate
+    `properties` column and content stays the single source of truth
+    (ChapterOut/JournalEntryOut expose `properties` and `tags` as
+    Pydantic `computed_field`s derived from content, not stored
+    columns). `backend/utils/tags.py` extracts tags from inline `#tags`
+    (skipping fenced/inline code) unioned with a frontmatter `tags:`
+    list. `backend/tag_indexing.py` keeps `TagLink` rows in sync,
+    mirroring `backend/ai/indexing.py`'s Chunk reindexing pattern on
+    purpose -- delete-then-recreate on every content change, called from
+    the same create/update/restore-version call sites, plus wired into
+    `trash.py`'s permanent-delete cascade (including the notebook-cascade
+    path) so tag links can't orphan the way an earlier gap almost let
+    attachments orphan before session 15's fix. New `GET /api/tags` and
+    `GET /api/tags/{tag}` endpoints power a Tags page (cloud of all tags
+    with counts, click through to a filtered list) -- the closest
+    equivalent to Obsidian's tag pane. `PropertiesPanel` (shared between
+    Notes and Journal) shows properties as editable key/value rows and
+    saves through new `PATCH .../properties` endpoints that rewrite just
+    the frontmatter block server-side, keeping the body untouched and
+    going through the normal version-snapshot path.
+
+    **Templates & daily notes.** `is_template` / `is_daily_template`
+    boolean columns on `Chapter` (migration `40a47800da2d`). At most one
+    chapter holds `is_daily_template` at a time, enforced in
+    `update_chapter` by unsetting any previous holder -- same invariant
+    shape as "exactly one default AI model" from session 18's settings
+    page. `backend/utils/templates.py` interpolates `{{date}}`/
+    `{{time}}`/`{{datetime}}` placeholders. New `GET
+    .../chapters/templates` (list), `POST .../chapters/from-template/
+    {id}` (create with interpolation), and `POST /api/daily-notes/today`
+    (get-or-create today's chapter in an auto-created "Daily Notes"
+    notebook, seeded from the designated daily template if one exists,
+    idempotent within the same calendar day). Refactored chapter
+    creation into a shared `create_chapter_record()` helper in
+    `routers/notes.py` (no leading underscore, unlike the other private
+    helpers there -- it's deliberately reused by `daily_notes.py`) so the
+    plain-create, from-template, and daily-note paths can't drift out of
+    sync with each other.
+
+    **Process notes worth remembering:**
+    - Made a real mistake partway through: used the sandbox `create_file`
+      tool instead of Desktop Commander for 7 new backend files, so they
+      landed in the sandbox instead of on this machine, while `edit_block`
+      calls to *existing* files (which went through Desktop Commander
+      correctly) ended up referencing modules that didn't exist yet.
+      Caught it with a plain `ls` before running anything -- the fix is
+      always to check, not to assume a tool call landed where intended.
+      Recreated all 7 files through Desktop Commander and re-verified
+      migration + imports + tests before moving on. **If a file you just
+      created isn't where you expect it, check which tool wrote it.**
+    - Two container/MCP-server disconnects happened mid-session --
+      once mid-verification (dev servers gone, `/tmp` cleared, new
+      `uptime -s`), once a genuine unresponsive-MCP-server hang where
+      even a trivial `echo test` timed out on both Desktop Commander and
+      Playwright and the honest move was to tell the user their local
+      MCP servers needed a restart rather than keep silently retrying.
+      Both times, recovery was the same: confirm the actual code
+      survived on disk (`git status --short`), confirm DB/migration
+      state (`alembic current`), restart both dev servers, re-verify
+      before continuing -- nothing was lost either time, everything
+      (including in-progress test data) had persisted to disk/DB.
+    - Live browser testing earned its keep twice this session, not
+      zero times: (1) frontmatter YAML was leaking into the rendered
+      markdown preview -- `marked` read the block's own `---` lines as
+      a setext heading, producing a garbled heading where the
+      frontmatter should have been invisible. Fixed with a
+      `stripFrontmatter()` frontend util applied to preview rendering
+      (Notes and Journal) and the chapter-list snippet preview -- raw
+      edit mode still shows full content, frontmatter included, on
+      purpose. (2) `PropertiesPanel` committed on every individual input
+      blur, which meant tabbing from the key field to the value field
+      in the same row fired a premature commit with the value field
+      still empty -- confirmed via the API directly (`version: 2`,
+      `properties: {"mood": ""}`) rather than assumed from the UI after
+      a tool disconnect interrupted the original test. Fixed by giving
+      each row a ref and checking `e.relatedTarget` against it before
+      committing, so a same-row focus move doesn't count as "done
+      editing." Neither of these would have been caught by
+      `pytest`+`build` alone -- both are the specific class of bug this
+      project's "test AND click through live" convention exists to
+      catch.
+
+    All 44 new backend tests (21 pure-function on frontmatter/tag
+    extraction, 23 API integration) pass alongside the existing 144
+    (188/188 total). `npm run build` clean. Committed, pushed, CI green
+    on both jobs. **AppImage not rebuilt** -- not asked for; now two
+    sessions behind (missing this session's work and session 21's
+    attachments-UI fix, on top of session 20 being the last rebuild).
+    **Not done, deliberately out of scope this session** (from the
+    user's own priority list): embeds/transclusion (`![[note]]`),
+    canvas, live-preview WYSIWYG editing -- good candidates for a future
+    session, each scoped on its own rather than bundled together.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -1086,13 +1205,14 @@ matching this machine), and the built binary isn't attached anywhere
 yet -- distribution is via GitHub Releases once actually published (see
 "License and version tag: resolved" below -- that decision itself is
 done, publishing isn't). **The AppImage currently sitting in the repo
-root is stale as of session 21** -- it still reflects session 20's
-rebuild, so it's missing session 21's Journal/Projects attachments UI.
-Rebuild before relying on the packaged app reflecting the current
-frontend. Still worth checking the most recent session in §4 before
-assuming staleness or freshness, though, since this note itself goes
-stale the moment another session touches backend/frontend code without
-rebuilding -- that's the normal state between rebuilds, not a bug.
+root is stale as of session 22** -- it still reflects session 20's
+rebuild, missing both session 21's Journal/Projects attachments UI and
+session 22's tags/properties/templates/daily-notes work. Rebuild before
+relying on the packaged app reflecting the current frontend. Still
+worth checking the most recent session in §4 before assuming staleness
+or freshness, though, since this note itself goes stale the moment
+another session touches backend/frontend code without rebuilding --
+that's the normal state between rebuilds, not a bug.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
