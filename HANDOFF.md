@@ -1007,13 +1007,35 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     All 44 new backend tests (21 pure-function on frontmatter/tag
     extraction, 23 API integration) pass alongside the existing 144
     (188/188 total). `npm run build` clean. Committed, pushed, CI green
-    on both jobs. **AppImage not rebuilt** -- not asked for; now two
-    sessions behind (missing this session's work and session 21's
-    attachments-UI fix, on top of session 20 being the last rebuild).
-    **Not done, deliberately out of scope this session** (from the
-    user's own priority list): embeds/transclusion (`![[note]]`),
-    canvas, live-preview WYSIWYG editing -- good candidates for a future
-    session, each scoped on its own rather than bundled together.
+    on both jobs. **AppImage rebuilt later this same session** -- see
+    the addendum below; don't read the rest of this paragraph as current
+    AppImage status. **Not done, deliberately out of scope this
+    session** (from the user's own priority list): embeds/transclusion
+    (`![[note]]`), canvas, live-preview WYSIWYG editing -- good
+    candidates for a future session, each scoped on its own rather than
+    bundled together.
+
+    **Addendum, same session:** user explicitly asked to rebuild the
+    AppImage afterward. Stopped the dev servers first (needed port
+    8420), ran `./packaging/appimage/build.sh` clean, then launched the
+    result against this machine's real, existing personal install at
+    `~/.local/share/Stud-OS/stud_os.db` (not a throwaway test DB) to
+    verify self-migration for real -- it went from `8efd67ebff84`
+    straight to head `40a47800da2d` with existing data intact, exactly
+    as session 20's self-migration fix intends. Clicked through Tags and
+    Today in the real browser against that real install; Today actually
+    created a live "Daily Notes" notebook + empty chapter in the user's
+    real data (not a test DB), so deleted it again afterward via trash
+    + permanent-delete to leave their real install exactly as found --
+    creating throwaway verification data in a real personal database
+    needs the same cleanup discipline as test data anywhere else, maybe
+    more so. Stopped the AppImage after verifying rather than leaving it
+    running, same as not leaving dev servers running unattended -- if
+    the user wants it running, that's a one-click relaunch from the repo
+    root (`./Stud-OS-x86_64.AppImage`). **AppImage is current as of this
+    session** as a result -- see §7 for the usual caveat that this goes
+    stale the moment a future session touches backend/frontend code
+    without rebuilding.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -1205,14 +1227,14 @@ matching this machine), and the built binary isn't attached anywhere
 yet -- distribution is via GitHub Releases once actually published (see
 "License and version tag: resolved" below -- that decision itself is
 done, publishing isn't). **The AppImage currently sitting in the repo
-root is stale as of session 22** -- it still reflects session 20's
-rebuild, missing both session 21's Journal/Projects attachments UI and
-session 22's tags/properties/templates/daily-notes work. Rebuild before
-relying on the packaged app reflecting the current frontend. Still
-worth checking the most recent session in §4 before assuming staleness
-or freshness, though, since this note itself goes stale the moment
-another session touches backend/frontend code without rebuilding --
-that's the normal state between rebuilds, not a bug.
+root should be current as of session 22** -- rebuilt at the end of that
+session (see the addendum in §4) and live-verified against this
+machine's real, existing data directory, including a real
+self-migration from `8efd67ebff84` to head. Still worth checking the
+most recent session in §4 before assuming so, though, since any session
+after 22 that touches backend/frontend code without an explicit rebuild
+will make this stale again -- that's the normal state between
+rebuilds, not a bug.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
