@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { journalApi } from '../../lib/journal'
+import { notebooksApi } from '../../lib/notebooks'
 import type { Mood } from '../../lib/api'
-import { WikiLinkText } from '../shared/WikiLinkText'
+import { ContentWithEmbeds } from '../shared/ContentWithEmbeds'
+import { LiveMarkdownEditor } from '../shared/LiveMarkdownEditor'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { MoodHeatmap } from './MoodHeatmap'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
@@ -29,16 +31,17 @@ function JournalEntryContent({ content }: { content: string }) {
   const resolvedLinks = useResolvedWikiLinks(content, true)
 
   return (
-    <WikiLinkText
+    <ContentWithEmbeds
       content={stripFrontmatter(content)}
       resolvedLinks={resolvedLinks}
-      onResolvedClick={(resolved) => navigate(`/notes?chapter=${resolved.id}`)}
+      onNavigate={(resolved) => navigate(`/notes?chapter=${resolved.id}`)}
       onTagClick={(tag) => navigate(`/tags/${encodeURIComponent(tag)}`)}
     />
   )
 }
 
 export function JournalView() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -47,6 +50,18 @@ export function JournalView() {
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [editMood, setEditMood] = useState<Mood>('okay')
+
+  // Ctrl/Cmd+click on a wiki-link, embed marker, or tag while editing a
+  // journal entry -- same on-demand resolution ChapterEditor uses, since
+  // the editor here doesn't keep a live resolvedLinks map either.
+  async function handleEditorLinkClick(linkTitle: string) {
+    const matches = await notebooksApi.searchChapterTitles(linkTitle)
+    const exact = matches.find((m) => m.title.toLowerCase() === linkTitle.toLowerCase())
+    if (exact) navigate(`/notes?chapter=${exact.id}`)
+  }
+  function handleEditorTagClick(tag: string) {
+    navigate(`/tags/${encodeURIComponent(tag)}`)
+  }
 
   const { data: entries } = useQuery({ queryKey: ['journal'], queryFn: journalApi.list })
 
@@ -125,12 +140,16 @@ export function JournalView() {
               </button>
             ))}
           </div>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="What happened today? Use [[Chapter Title]] to link notes."
-            className="h-40 resize-none rounded bg-neutral-900 p-3 text-sm outline-none placeholder:text-neutral-600"
-          />
+          <div className="h-40 rounded bg-neutral-900 p-3">
+            <LiveMarkdownEditor
+              value={content}
+              onChange={(v) => setContent(v)}
+              placeholder="What happened today? Use [[Chapter Title]] to link notes, ![[Chapter Title]] to embed one, #tag for tags."
+              onWikiLinkClick={handleEditorLinkClick}
+              onEmbedClick={handleEditorLinkClick}
+              onTagClick={handleEditorTagClick}
+            />
+          </div>
           <button
             type="submit"
             className="rounded bg-neutral-700 px-3 py-2 text-sm font-medium hover:bg-neutral-600"
@@ -163,11 +182,15 @@ export function JournalView() {
                     </button>
                   ))}
                 </div>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="mb-2 h-28 w-full resize-none rounded bg-neutral-800 p-2 text-sm outline-none"
-                />
+                <div className="mb-2 h-28 rounded bg-neutral-800 p-2">
+                  <LiveMarkdownEditor
+                    value={editContent}
+                    onChange={(v) => setEditContent(v)}
+                    onWikiLinkClick={handleEditorLinkClick}
+                    onEmbedClick={handleEditorLinkClick}
+                    onTagClick={handleEditorTagClick}
+                  />
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() =>

@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { notebooksApi } from '../../lib/notebooks'
 import { AttachmentPanel } from '../attachments/AttachmentPanel'
 import { PropertiesPanel } from '../shared/PropertiesPanel'
-import { WikiLinkText } from '../shared/WikiLinkText'
+import { ContentWithEmbeds } from '../shared/ContentWithEmbeds'
+import { LiveMarkdownEditor, type LiveMarkdownEditorHandle } from '../shared/LiveMarkdownEditor'
 import { useResolvedWikiLinks } from '../../lib/useResolvedWikiLinks'
 import { detectActiveWikiLinkQuery } from '../../lib/wikiLinks'
 import { stripFrontmatter } from '../../lib/frontmatter'
@@ -31,7 +32,7 @@ export function ChapterEditor({
   const [linkQueryStart, setLinkQueryStart] = useState<number | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [showSidePanel, setShowSidePanel] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<LiveMarkdownEditorHandle>(null)
 
   const { data: chapter } = useQuery({
     queryKey: ['chapter', chapterId],
@@ -119,16 +120,26 @@ export function ChapterEditor({
     }
   }
 
-  async function handleContentChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const newContent = e.target.value
+  // Ctrl/Cmd+click on a wiki-link or embed marker while editing --
+  // resolved on demand since edit mode doesn't keep a live resolvedLinks
+  // map (that's only computed in preview mode, to avoid a lookup on
+  // every keystroke). Falls back to the create-new-chapter prompt so
+  // Ctrl+click on an unresolved link behaves the same as clicking it in
+  // Preview.
+  async function handleEditorLinkClick(title: string) {
+    const matches = await notebooksApi.searchChapterTitles(title)
+    const exact = matches.find((m) => m.title.toLowerCase() === title.toLowerCase())
+    if (exact) onNavigate(exact.notebook_id, exact.id)
+    else handleUnresolvedClick(title)
+  }
+
+  function handleContentChange(newContent: string, cursor: number) {
     setContent(newContent)
 
-    const cursor = e.target.selectionStart
     const active = detectActiveWikiLinkQuery(newContent.slice(0, cursor))
     if (active && active.query.length > 0) {
       setLinkQueryStart(active.startIndex)
-      const matches = await notebooksApi.searchChapterTitles(active.query)
-      setSuggestions(matches)
+      notebooksApi.searchChapterTitles(active.query).then(setSuggestions)
     } else {
       setLinkQueryStart(null)
       setSuggestions([])
@@ -136,15 +147,15 @@ export function ChapterEditor({
   }
 
   function applySuggestion(title: string) {
-    if (linkQueryStart === null || !textareaRef.current) return
-    const cursor = textareaRef.current.selectionStart
-    const before = content.slice(0, linkQueryStart)
-    const after = content.slice(cursor)
-    const newContent = `${before}[[${title}]]${after}`
-    setContent(newContent)
+    if (linkQueryStart === null || !editorRef.current) return
+    // Re-derive the in-progress "[[query" length directly from content at
+    // linkQueryStart -- more reliable than trying to track the cursor
+    // position separately as the user types.
+    const activeQuery = content.slice(linkQueryStart).match(/^\[\[([^[\]]*)/)
+    const queryLength = activeQuery ? activeQuery[0].length : 0
+    editorRef.current.insertAtCursor(`[[${title}]]`, linkQueryStart, linkQueryStart + queryLength)
     setSuggestions([])
     setLinkQueryStart(null)
-    requestAnimationFrame(() => textareaRef.current?.focus())
   }
 
   if (!chapter) return <div className="p-6 text-neutral-500">Loading...</div>
@@ -268,17 +279,19 @@ export function ChapterEditor({
           </div>
         </div>
         {mode === 'edit' ? (
-          <div className="relative h-[calc(100%-3rem)]">
-            <textarea
-              ref={textareaRef}
+          <div className="relative h-[calc(100%-3rem)] rounded bg-neutral-900 p-4">
+            <LiveMarkdownEditor
+              ref={editorRef}
               value={content}
               onChange={handleContentChange}
               onBlur={() => {
                 setTimeout(() => setSuggestions([]), 150) // allow suggestion click to register first
                 if (content !== chapter.content) save.mutate(content)
               }}
-              placeholder="Write markdown here. Use [[Chapter Title]] to link other chapters."
-              className="h-full w-full resize-none rounded bg-neutral-900 p-4 font-mono text-sm outline-none placeholder:text-neutral-600"
+              placeholder="Write markdown here. Use [[Chapter Title]] to link other chapters, ![[Chapter Title]] to embed one, #tag for tags. Ctrl/Cmd+click a link, embed, or tag to open it."
+              onWikiLinkClick={handleEditorLinkClick}
+              onEmbedClick={handleEditorLinkClick}
+              onTagClick={handleTagClick}
             />
             {suggestions.length > 0 && (
               <div className="absolute bottom-2 left-2 z-10 w-72 rounded bg-neutral-800 shadow-lg">
@@ -286,7 +299,7 @@ export function ChapterEditor({
                   <button
                     key={s.id}
                     onMouseDown={(e) => {
-                      e.preventDefault() // keep textarea focus so cursor position survives
+                      e.preventDefault() // keep editor focus so cursor position survives
                       applySuggestion(s.title)
                     }}
                     className="block w-full truncate px-3 py-2 text-left text-sm text-neutral-200 hover:bg-neutral-700"
@@ -299,10 +312,10 @@ export function ChapterEditor({
           </div>
         ) : (
           <div className="h-[calc(100%-3rem)] w-full overflow-y-auto rounded bg-neutral-900 p-4">
-            <WikiLinkText
+            <ContentWithEmbeds
               content={stripFrontmatter(content)}
               resolvedLinks={resolvedLinks}
-              onResolvedClick={handleResolvedClick}
+              onNavigate={handleResolvedClick}
               onUnresolvedClick={handleUnresolvedClick}
               onTagClick={handleTagClick}
               emptyPlaceholder="Nothing written yet."
