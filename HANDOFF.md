@@ -1036,6 +1036,120 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     session** as a result -- see §7 for the usual caveat that this goes
     stale the moment a future session touches backend/frontend code
     without rebuilding.
+23. **Follow-up to session 22: user asked "it does everything Obsidian
+    does, right?" after the previous session's tags/templates work --
+    correctly read as "no it doesn't, and here's what's still missing"
+    rather than confirmed. Answered honestly (still missing embeds,
+    canvas, live-preview editing, and the structural stuff -- plain
+    files, plugin ecosystem -- that can't realistically close), then
+    the user picked embeds/transclusion and live-preview editing as the
+    next two.**
+
+    **Embeds/transclusion (`![[Note]]`)** needed no backend changes --
+    `wiki_parser.py`'s `[[Title]]` regex already matches inside
+    `![[Title]]` since it doesn't check what precedes `[[`, so an embed
+    was already creating a real backlink before this session started.
+    Pinned that down explicitly in a new `test_embeds.py` rather than
+    leave it an unstated assumption the frontend now depends on.
+    `lib/embeds.ts` splits content on the embed syntax before it ever
+    reaches `WikiLinkText` (otherwise `marked` reads the leading `!` as
+    broken image markup). `EmbedBlock` renders the referenced note's
+    content expanded inline, recursing through a new `ContentWithEmbeds`
+    wrapper (now the standard way to render note/journal content
+    read-only, replacing direct `WikiLinkText` usage in both Notes
+    preview and Journal) for nested embeds -- capped at depth 3 to
+    survive circular embeds. Verified live with a note that embeds
+    itself: it expanded 3 levels deep then fell back to a plain link
+    instead of hanging, exactly the case the cap exists for. Also
+    verified the clean two-note case and confirmed end-to-end that
+    Target Note correctly showed Source Note as a real backlink after
+    the embed -- the full embed→link→backlink chain works, not just the
+    rendering.
+
+    **Live-preview editor**
+    (`frontend/src/components/shared/LiveMarkdownEditor.tsx`), replacing
+    the plain `<textarea>` in both `ChapterEditor` and `JournalView`.
+    This was flagged back in session 22 as a bigger, riskier undertaking
+    than the other Obsidian-parity features (the original rebuild had
+    deliberately skipped TipTap for simplicity -- see the early session
+    history above) -- turned out to be right to scope separately. Built
+    on CodeMirror 6 (same editor engine Obsidian itself uses, not a
+    coincidence): markdown marks (`**`, `#`,
+    `` ` ``) hide on every line except the one the cursor is on, so the
+    document reads close to its rendered form while staying plain
+    editable text underneath. Wiki-links/tags/embeds render as colored
+    pills, always visible (nothing to hide), with Ctrl/Cmd+click
+    navigation via `EditorView.domEventHandlers`. Deliberately out of
+    scope, noted in the component's own doc comment so a future session
+    doesn't have to rediscover the reasoning: expanding an embed's
+    actual nested content while editing (shows as a styled marker
+    instead, fully expanded only in Preview), and hiding list/blockquote
+    markers -- both add real complexity for comparatively little value
+    relative to the core "see formatting as you type" experience.
+
+    The `[[` autocomplete (existing since an earlier session) had to be
+    fully rewired from textarea-cursor-position (`selectionStart`) to
+    CodeMirror's own selection API, via an imperative handle
+    (`insertAtCursor`) exposed through `forwardRef`/`useImperativeHandle`
+    -- this was the single highest-risk piece of the whole editor swap,
+    since it's not something `npm run build` can catch a regression in.
+    Verified live: typing `[[Sou` still surfaces "Source Note" in the
+    dropdown, and picking it inserts exactly `[[Source Note]]` at the
+    right offset, replacing only the in-progress query.
+
+    **A real crash, caught before it shipped:** the first version of the
+    decoration logic passed `Decoration.line()` a full-line range
+    (`{from: line.from, to: line.to}`) instead of the zero-width point
+    at the line's start CodeMirror's API actually expects, and built
+    decorations per-line instead of collecting them across the whole
+    document before one final sort. Both violate `RangeSetBuilder`'s
+    ordering contract, and CodeMirror crashed outright the moment a
+    multi-line note with mixed formatting got typed into it --
+    `"Ranges must be added sorted by from position and startSide"` in
+    the browser console. Content wasn't corrupted (the failed save left
+    the previous version on disk untouched, since the crash happened
+    before the blur-save fired) but the bug was real and 100%
+    reproducible, not an edge case. Fixed by collecting every
+    decoration for the whole document into one flat array first, then
+    sorting once by `(from, to)` ascending before handing them to the
+    builder -- this is the kind of bug that `npm run build` cannot catch
+    (TypeScript has no way to know a `RangeSetBuilder` call sequence is
+    invalid; it's a runtime contract, not a type) and only showed up by
+    actually typing multi-line content into the editor in a real
+    browser and checking the console.
+
+    189 backend tests passing (1 new, confirming the embed-creates-a-
+    backlink assumption). `npm run build` clean -- CodeMirror now shares
+    a common chunk between Notes and Journal rather than being bundled
+    twice, since both import the same `LiveMarkdownEditor`. Given
+    parity with Notes, also swapped Journal's create/edit `<textarea>`s
+    for the same live-preview editor (no autocomplete wired there,
+    matching Journal's existing scope -- it never had wiki-link
+    autocomplete before this session either, so that's not a
+    regression). Live-verified end-to-end in Journal too: a real entry
+    with a tag and an embed saved and rendered correctly.
+
+    Two more container/MCP-server disconnects this session, recovered
+    the same way as every prior time: confirm survival on disk/DB via
+    `git status --short` and a direct API check, restart both dev
+    servers, re-verify, continue. One of them produced a red herring
+    worth remembering: after a reconnect left the browser viewport
+    narrow, Playwright reported "element intercepts pointer events" on
+    every click into the editor, which looked exactly like a real
+    z-index/overlay bug. It wasn't -- resizing the viewport back to a
+    normal width fixed it immediately. **When a click failure shows up
+    right after a tool reconnect, check the viewport size before
+    assuming the app broke.**
+
+    All test data (two test notebooks, a journal entry) cleaned up
+    afterward, confirmed via empty `/api/trash`, `/api/notebooks`,
+    `/api/journal`, and `/api/tags`. Committed, pushed, CI green on both
+    jobs. **AppImage not rebuilt** -- not asked for this session, so
+    it's now one session behind (missing this session's embeds/live-
+    preview work, on top of session 22 being the last rebuild).
+    **Still not done, still deliberately out of scope**: canvas, plus
+    the structural pieces (plain-file storage, a plugin ecosystem) that
+    were never going to be closeable regardless of session count.
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -1227,14 +1341,14 @@ matching this machine), and the built binary isn't attached anywhere
 yet -- distribution is via GitHub Releases once actually published (see
 "License and version tag: resolved" below -- that decision itself is
 done, publishing isn't). **The AppImage currently sitting in the repo
-root should be current as of session 22** -- rebuilt at the end of that
-session (see the addendum in §4) and live-verified against this
-machine's real, existing data directory, including a real
-self-migration from `8efd67ebff84` to head. Still worth checking the
-most recent session in §4 before assuming so, though, since any session
-after 22 that touches backend/frontend code without an explicit rebuild
-will make this stale again -- that's the normal state between
-rebuilds, not a bug.
+root is stale as of session 23** -- it still reflects session 22's
+rebuild, missing session 23's embeds/transclusion and live-preview
+editor work entirely. Rebuild before relying on the packaged app
+reflecting the current frontend. Still worth checking the most recent
+session in §4 before assuming staleness or freshness, though, since
+this note itself goes stale the moment another session touches
+backend/frontend code without rebuilding -- that's the normal state
+between rebuilds, not a bug.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
