@@ -5,12 +5,35 @@ Personal knowledge, productivity, and AI operating system. See
 
 ## Status
 
-All of V1 from the vision doc is built, tested, and in daily-usable shape:
+All of V1 from the vision doc is built, tested, and in daily-usable
+shape, plus a growing set of Obsidian-parity features added since (see
+`HANDOFF.md` sessions 22 onward for the running list of what's still
+missing toward full parity):
 
 - **Notes** — notebooks/chapters, `[[wiki-links]]` with live autocomplete,
   backlinks, full markdown rendering (via `marked`), chapter version
   history (browse + non-destructive restore), attachments, export
   (chapter → `.md`/`.zip`, notebook → `.zip` of all chapters)
+- **Tags & properties** — inline `#tags` and YAML frontmatter properties
+  on notes and journal entries (frontmatter lives in the content itself,
+  same philosophy as Obsidian's plain-file model), a Tags page (cloud of
+  all tags with counts, click through to a filtered list), and an
+  editable Properties panel
+- **Templates & daily notes** — mark any chapter as a reusable template
+  (with `{{date}}`/`{{time}}` interpolation) or as the one daily-note
+  template, plus a one-click "Today" button that gets or creates the
+  day's note
+- **Embeds/transclusion** — `![[Note Title]]` expands another note's
+  content inline wherever it's rendered, recursively, with a depth cap
+  to survive circular embeds
+- **Live-preview editor** — a CodeMirror-based editor (Notes and
+  Journal) that hides markdown marks (`**`, `#`, `` ` ``) on every line
+  except the one you're editing, so the page reads close to its
+  rendered form while staying plain text underneath; wiki-links, tags,
+  and embeds render as clickable colored pills with Ctrl/Cmd+click
+  navigation
+- **Canvas** — a freeform visual board (built on React Flow): text
+  cards and note-reference cards connected by edges, autosaved
 - **Tasks** — Kanban, recurring scheduling (auto-spawns next occurrence),
   subtasks, overdue penalties (actually wired up, not dead code)
 - **Gamification** — XP/levels/streaks/badges, tied to task completion
