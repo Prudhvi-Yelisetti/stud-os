@@ -1150,6 +1150,90 @@ plan (no TipTap, no Zustand — simpler choices worked fine).
     **Still not done, still deliberately out of scope**: canvas, plus
     the structural pieces (plain-file storage, a plugin ecosystem) that
     were never going to be closeable regardless of session count.
+24. **Follow-up to session 23: user asked what's still remaining before
+    Obsidian parity.** Answered honestly again -- confirmed via grep
+    that block references, callouts, footnotes, and a command palette
+    genuinely don't exist yet (didn't just assume) -- then split the
+    answer into what's actually buildable (canvas, block refs, callouts/
+    footnotes, command palette, local graph view, themes, advanced
+    search operators, outline view) versus what structurally can't close
+    regardless of session count (plain-file storage, a plugin ecosystem,
+    multi-device sync, Publish). User picked "Continue" on canvas, the
+    one already flagged as the natural next pick from session 23.
+
+    **Canvas** (`backend/database/models/canvas.py`,
+    `frontend/src/components/canvas/`): a freeform visual board, text
+    cards and note-reference cards connected by edges, built on React
+    Flow (`@xyflow/react`) -- already a dependency for the Knowledge
+    Graph view, so no new graphics library needed. Chose a single JSON
+    blob column (`Canvas.data`) over normalized node/edge tables,
+    matching Obsidian's own JSON Canvas format (one JSON document per
+    canvas) -- nothing else ever needs to query into a single node or
+    edge, so per-row storage would only add cascade-delete plumbing (the
+    kind attachments needed fixing for back in session 15) for no real
+    benefit. Standard CRUD router mirroring `routers/projects.py`'s
+    shape, wired into the existing generic trash pattern with zero
+    cascade cleanup needed, for the same single-blob reason. 8 new
+    tests, 197/197 total.
+
+    **Three real bugs, all caught by actually clicking through it, none
+    of which `npm run build` could have caught (all runtime behavior,
+    not type errors):**
+    1. Typing into a text node's content never saved, full stop. The
+       textarea's `onChange` updates node state directly, bypassing
+       React Flow's `onNodesChange` -- the only path wired to the save
+       function. Confirmed via a direct API check (not just "it looked
+       fine in the UI"): a node saved with `text: ""` right after typing
+       a full sentence into it. Fixed by having that direct-update path
+       trigger its own save, reading current edges from a ref rather
+       than a closed-over `edges` variable, since the callback lives
+       inside node `data` from creation time and never gets recreated
+       for already-existing nodes.
+    2. New nodes always spawned at the exact same fixed position, so a
+       second node landed completely invisible underneath the first --
+       looked exactly like the "+ Note" button had silently done
+       nothing (this is *why* it got caught: something felt off enough
+       to screenshot rather than assume success from a 200 response).
+       Fixed with a staggered diagonal spawn offset.
+    3. The custom node types never rendered React Flow `<Handle>`
+       components at all -- zero drawable connection points anywhere on
+       the page, confirmed by directly querying `.react-flow__handle`
+       count before assuming (it was 0, not "hard to click in
+       automation"). `onConnect` was fully wired dead code with no UI
+       path to ever trigger it. Fixed by adding source/target `Handle`s
+       to both node types.
+
+    **Testing-technique note worth keeping:** verifying node-drag and
+    edge-drawing needed a custom multi-step Playwright mouse sequence
+    (`mouse.down`, several incremental `mouse.move` calls, `mouse.up`)
+    via `browser_run_code_unsafe` -- Playwright's built-in `dragTo()`
+    reports success but doesn't satisfy React Flow's pointer-capture/
+    drag-threshold logic, so a naive drag test would have silently
+    passed against a broken drag *and* a working one, telling you
+    nothing either way. Caught this by screenshotting right after a
+    `dragTo()` call and seeing the node hadn't visually moved at all,
+    rather than trusting the tool call's "success." **If a Playwright
+    drag/drop-style interaction reports success but nothing changed,
+    check with a screenshot before trusting it -- some libraries
+    (React Flow among them) need real incremental pointer movement, not
+    a single jump.**
+
+    All node moves, edge connections, and content edits verified to
+    round-trip through the real API after each fix, not just render
+    once. Trash UI verified to show the canvas type/icon correctly (a
+    `Record<TrashedItem['type'], string>` in `TrashView.tsx` --
+    TypeScript would have caught a missing `canvas` key at build time
+    here, which it did). All test data cleaned up, confirmed via empty
+    `/api/trash`, `/api/canvases`, `/api/notebooks`. One more container
+    reset this session, recovered the same way as every prior time.
+    Committed, pushed, CI green on both jobs. **AppImage not rebuilt**
+    -- not asked for; now two sessions behind (missing this session's
+    Canvas plus session 23's embeds/live-preview work, on top of session
+    22 being the last rebuild). **Still not done**: block references,
+    callouts/footnotes, command palette, local graph view, themes,
+    advanced search operators, outline view -- plus the still-permanent
+    structural gaps (plain-file storage, plugin ecosystem, sync,
+    Publish).
 
 **A pattern worth naming, now used three times (Phases 3, 4, and the AI
 audit):** when no real API key is available for live-verifying a
@@ -1341,14 +1425,14 @@ matching this machine), and the built binary isn't attached anywhere
 yet -- distribution is via GitHub Releases once actually published (see
 "License and version tag: resolved" below -- that decision itself is
 done, publishing isn't). **The AppImage currently sitting in the repo
-root is stale as of session 23** -- it still reflects session 22's
+root is stale as of session 24** -- it still reflects session 22's
 rebuild, missing session 23's embeds/transclusion and live-preview
-editor work entirely. Rebuild before relying on the packaged app
-reflecting the current frontend. Still worth checking the most recent
-session in §4 before assuming staleness or freshness, though, since
-this note itself goes stale the moment another session touches
-backend/frontend code without rebuilding -- that's the normal state
-between rebuilds, not a bug.
+editor work AND session 24's Canvas feature entirely. Rebuild before
+relying on the packaged app reflecting the current frontend. Still
+worth checking the most recent session in §4 before assuming staleness
+or freshness, though, since this note itself goes stale the moment
+another session touches backend/frontend code without rebuilding --
+that's the normal state between rebuilds, not a bug.
 
 **Settings can now do everything through the UI (sessions 13 and 14,
 §4)**: connect a provider by pasting its key through an Add-API-key
