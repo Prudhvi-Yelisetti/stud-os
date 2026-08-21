@@ -10,3 +10,4 @@ from backend.database.models.gamification import (  # noqa: F401
 )
 from backend.database.models.attachments import Attachment  # noqa: F401
 from backend.database.models.ai import Chunk, AISettings  # noqa: F401
+from backend.database.models.canvas import Canvas  # noqa: F401

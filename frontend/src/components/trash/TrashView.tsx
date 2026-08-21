@@ -8,6 +8,7 @@ const TYPE_ICON: Record<TrashedItem['type'], string> = {
   task: '✅',
   journal: '📔',
   project: '📁',
+  canvas: '🖼️',
 }
 
 export function TrashView() {

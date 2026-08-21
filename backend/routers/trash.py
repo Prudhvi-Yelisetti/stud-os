@@ -9,6 +9,7 @@ from backend.database.models.notes import Notebook, Chapter
 from backend.database.models.tasks import Task
 from backend.database.models.journal import JournalEntry
 from backend.database.models.projects import Project
+from backend.database.models.canvas import Canvas
 from backend.database.models.user import User
 from backend.dependencies import get_current_user
 from backend.ai.indexing import delete_chunks_for
@@ -35,6 +36,7 @@ TRASHABLE = {
     "task": Task,
     "journal": JournalEntry,
     "project": Project,
+    "canvas": Canvas,
 }
 
 
@@ -49,7 +51,7 @@ class TrashedItem(BaseModel):
 def list_trash(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     items: list[TrashedItem] = []
 
-    for type_name in ("notebook", "task", "journal", "project"):
+    for type_name in ("notebook", "task", "journal", "project", "canvas"):
         model = TRASHABLE[type_name]
         rows = db.query(model).filter(model.user_id == user.id, model.is_trashed.is_(True)).all()
         items += [TrashedItem(type=type_name, id=r.id, title=r.title, trashed_at=r.trashed_at) for r in rows]

@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from backend.database import models  # noqa: F401 -- registers models on Base.metadata
 from backend.routers import (
     notes, tasks, journal, gamification, projects, search, graph, attachments, trash, ai,
-    tags, daily_notes,
+    tags, daily_notes, canvas,
 )
 
 app = FastAPI(title="Stud-OS API", version="1.0.0")
@@ -39,6 +39,7 @@ app.include_router(trash.router)
 app.include_router(ai.router)
 app.include_router(tags.router)
 app.include_router(daily_notes.router)
+app.include_router(canvas.router)
 
 
 @app.get("/api/health")

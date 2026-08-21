@@ -13,6 +13,8 @@ const JournalPage = lazy(() => import('./pages/JournalPage').then((m) => ({ defa
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })))
 const GraphPage = lazy(() => import('./pages/GraphPage').then((m) => ({ default: m.GraphPage })))
 const TagsPage = lazy(() => import('./pages/TagsPage').then((m) => ({ default: m.TagsPage })))
+const CanvasesPage = lazy(() => import('./pages/CanvasesPage').then((m) => ({ default: m.CanvasesPage })))
+const CanvasEditorPage = lazy(() => import('./pages/CanvasEditorPage').then((m) => ({ default: m.CanvasEditorPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const TimelinePage = lazy(() => import('./pages/TimelinePage').then((m) => ({ default: m.TimelinePage })))
 const TrashPage = lazy(() => import('./pages/TrashPage').then((m) => ({ default: m.TrashPage })))
@@ -40,6 +42,8 @@ function App() {
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/tags" element={<TagsPage />} />
               <Route path="/tags/:tagName" element={<TagsPage />} />
+              <Route path="/canvas" element={<CanvasesPage />} />
+              <Route path="/canvas/:canvasId" element={<CanvasEditorPage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/trash" element={<TrashPage />} />
               <Route path="/settings" element={<SettingsPage />} />

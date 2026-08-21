@@ -235,7 +235,7 @@ export interface Attachment {
 }
 
 export interface TrashedItem {
-  type: 'notebook' | 'chapter' | 'task' | 'journal' | 'project'
+  type: 'notebook' | 'chapter' | 'task' | 'journal' | 'project' | 'canvas'
   id: string
   title: string
   trashed_at: string | null
@@ -251,4 +251,13 @@ export interface TaggedItem {
   id: string
   title: string
   notebook_id: string | null
+}
+
+export interface Canvas {
+  id: string
+  title: string
+  /** JSON-encoded {nodes, edges} graph -- parse/stringify at the call site. */
+  data: string
+  created_at: string
+  updated_at: string
 }
