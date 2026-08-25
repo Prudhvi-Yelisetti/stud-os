@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { marked } from 'marked'
+import '../../lib/markdownExtensions' // side effect: registers callout block extension
+import { preprocessFootnotes, annotateFootnoteAnchors } from '../../lib/footnotes'
 import type { ResolvedChapterLink } from '../../lib/useResolvedWikiLinks'
 
 const WIKI_LINK_PATTERN = /\[\[([^\[\]]+)\]\]/g
@@ -41,11 +43,15 @@ export function WikiLinkText({
 
   const html = useMemo(() => {
     if (content.trim() === '') return ''
+    // Footnotes first -- extracts [^id]: definitions and appends a
+    // rendered footnotes list, so wiki-links/tags inside a footnote's own
+    // text still get substituted normally by the two passes below.
+    let withPlaceholders = preprocessFootnotes(content)
     // Swap [[Title]] for a placeholder markdown link so `marked` renders a
     // normal <a> for it (getting all its escaping for free), encoding
     // resolution status into the URL scheme so we can style + intercept
     // clicks after render without re-parsing the markdown ourselves.
-    let withPlaceholders = content.replace(WIKI_LINK_PATTERN, (_match, rawTitle) => {
+    withPlaceholders = withPlaceholders.replace(WIKI_LINK_PATTERN, (_match, rawTitle) => {
       const title = rawTitle.trim()
       const scheme = resolvedLinks.get(title) ? 'wikilink-resolved' : 'wikilink-unresolved'
       return `[${title}](${scheme}:${encodeURIComponent(title)})`
@@ -56,7 +62,8 @@ export function WikiLinkText({
     withPlaceholders = withPlaceholders.replace(TAG_PATTERN, (_match, name: string) => {
       return `[#${name}](tag:${encodeURIComponent(name.toLowerCase())})`
     })
-    return marked.parse(withPlaceholders, { breaks: true, async: false }) as string
+    const rendered = marked.parse(withPlaceholders, { breaks: true, async: false }) as string
+    return annotateFootnoteAnchors(rendered)
   }, [content, resolvedLinks])
 
   useEffect(() => {
