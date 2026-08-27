@@ -12,6 +12,7 @@ import { stripFrontmatter } from '../../lib/frontmatter'
 import { VersionHistoryPanel } from './VersionHistoryPanel'
 import { RelatedNotesPanel } from './RelatedNotesPanel'
 import { QuizPanel } from './QuizPanel'
+import { OutlineSidebar } from './OutlineSidebar'
 
 export function ChapterEditor({
   chapterId,
@@ -33,6 +34,7 @@ export function ChapterEditor({
   const [showHistory, setShowHistory] = useState(false)
   const [showSidePanel, setShowSidePanel] = useState(false)
   const editorRef = useRef<LiveMarkdownEditorHandle>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
 
   const { data: chapter } = useQuery({
     queryKey: ['chapter', chapterId],
@@ -162,6 +164,7 @@ export function ChapterEditor({
 
   const sidePanelContent = (
     <>
+      {mode === 'preview' && <OutlineSidebar content={stripFrontmatter(content)} scrollContainerRef={previewRef} />}
       <h2 className="mb-2 text-sm font-medium text-neutral-400">Referenced by</h2>
       {backlinks && backlinks.length > 0 ? (
         <ul className="flex flex-col gap-1">
@@ -311,7 +314,7 @@ export function ChapterEditor({
             )}
           </div>
         ) : (
-          <div className="h-[calc(100%-3rem)] w-full overflow-y-auto rounded bg-neutral-900 p-4">
+          <div ref={previewRef} className="h-[calc(100%-3rem)] w-full overflow-y-auto rounded bg-neutral-900 p-4">
             <ContentWithEmbeds
               content={stripFrontmatter(content)}
               resolvedLinks={resolvedLinks}

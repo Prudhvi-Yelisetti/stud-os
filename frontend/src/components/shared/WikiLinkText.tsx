@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { marked } from 'marked'
 import '../../lib/markdownExtensions' // side effect: registers callout block extension
 import { preprocessFootnotes, annotateFootnoteAnchors } from '../../lib/footnotes'
+import { annotateHeadingIds } from '../../lib/outline'
 import type { ResolvedChapterLink } from '../../lib/useResolvedWikiLinks'
 
 const WIKI_LINK_PATTERN = /\[\[([^\[\]]+)\]\]/g
@@ -63,7 +64,7 @@ export function WikiLinkText({
       return `[#${name}](tag:${encodeURIComponent(name.toLowerCase())})`
     })
     const rendered = marked.parse(withPlaceholders, { breaks: true, async: false }) as string
-    return annotateFootnoteAnchors(rendered)
+    return annotateHeadingIds(annotateFootnoteAnchors(rendered))
   }, [content, resolvedLinks])
 
   useEffect(() => {
