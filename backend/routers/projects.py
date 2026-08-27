@@ -78,8 +78,19 @@ def update_project(
 @router.delete("/{project_id}", status_code=204)
 def trash_project(project_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     project = _get_project_or_404(db, project_id, user)
+    now = datetime.now(timezone.utc)
     project.is_trashed = True
-    project.trashed_at = datetime.now(timezone.utc)
+    project.trashed_at = now
+    # Cascade to tasks -- same reasoning as trash_notebook() cascading to
+    # chapters in routers/notes.py: without this a task under a trashed
+    # project is orphaned (not itself trashed) rather than trashed, so it
+    # stays live in the graph, search, and direct-by-id lookups and never
+    # shows up in Trash to be restored or purged.
+    (
+        db.query(Task)
+        .filter(Task.project_id == project_id, Task.is_trashed.is_(False))
+        .update({Task.is_trashed: True, Task.trashed_at: now})
+    )
     db.commit()
 
 

@@ -89,8 +89,27 @@ def restore_item(item_type: str, item_id: str, db: Session = Depends(get_db), us
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    cascaded_at = item.trashed_at  # captured before we clear it, used below for notebooks
     item.is_trashed = False
     item.trashed_at = None
+    if item_type == "notebook" and cascaded_at is not None:
+        # Cascade-restore chapters trashed at the exact same instant as
+        # this notebook -- i.e. the ones trash_notebook() cascaded onto
+        # when the notebook itself was trashed, not a chapter that had
+        # already been independently trashed beforehand (that one keeps
+        # its own trashed_at and stays in Trash on its own).
+        (
+            db.query(Chapter)
+            .filter(Chapter.notebook_id == item.id, Chapter.trashed_at == cascaded_at)
+            .update({Chapter.is_trashed: False, Chapter.trashed_at: None})
+        )
+    if item_type == "project" and cascaded_at is not None:
+        # Mirrors the notebook->chapter cascade-restore above.
+        (
+            db.query(Task)
+            .filter(Task.project_id == item.id, Task.trashed_at == cascaded_at)
+            .update({Task.is_trashed: False, Task.trashed_at: None})
+        )
     db.commit()
     db.refresh(item)
     return TrashedItem(type=item_type, id=item.id, title=item.title, trashed_at=item.trashed_at)

@@ -98,8 +98,23 @@ def update_notebook(
 @router.delete("/{notebook_id}", status_code=204)
 def trash_notebook(notebook_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     nb = _get_notebook_or_404(db, notebook_id, user)
+    now = datetime.now(timezone.utc)
     nb.is_trashed = True
-    nb.trashed_at = datetime.now(timezone.utc)
+    nb.trashed_at = now
+    # Cascade to chapters -- without this, a chapter under a trashed
+    # notebook is orphaned rather than trashed: is_trashed stays False, so
+    # it's invisible in every notebook-scoped view (the notebook that
+    # would show it is gone) but still fully live everywhere that queries
+    # Chapter directly -- the whole-graph view, semantic search /
+    # "Related notes", and direct GET by id -- and it never appears in
+    # Trash to be restored or permanently deleted. Only touch chapters
+    # that aren't already individually trashed, so an already-trashed
+    # chapter keeps its own trashed_at instead of getting it overwritten.
+    (
+        db.query(Chapter)
+        .filter(Chapter.notebook_id == notebook_id, Chapter.is_trashed.is_(False))
+        .update({Chapter.is_trashed: True, Chapter.trashed_at: now})
+    )
     db.commit()
 
 
@@ -170,6 +185,30 @@ def _sync_wiki_links(db: Session, chapter: Chapter) -> None:
             db.add(ChapterLink(from_chapter_id=chapter.id, to_chapter_id=target.id))
 
 
+def _backfill_incoming_links(db: Session, chapter: Chapter) -> None:
+    """When a chapter is created (or renamed) to a title that some other
+    chapter already has an unresolved [[wiki link]] pointing at, that
+    other chapter's link was skipped by _sync_wiki_links() at the time --
+    the target didn't exist under this title yet -- and nothing re-checks
+    it later, since a chapter's outgoing links only get re-derived when
+    THAT chapter is itself saved again. Net effect without this: link to
+    a note before creating it (or rename a note to match an existing
+    unresolved link), and the edge/backlink is permanently missing even
+    though the title and content now match. Only adds rows that don't
+    already exist; never removes anything (that stays _sync_wiki_links'
+    job, on the source chapter's own saves)."""
+    already_linked = {
+        link.from_chapter_id
+        for link in db.query(ChapterLink).filter(ChapterLink.to_chapter_id == chapter.id).all()
+    }
+    others = db.query(Chapter).filter(Chapter.is_trashed.is_(False), Chapter.id != chapter.id).all()
+    for other in others:
+        if other.id in already_linked:
+            continue
+        if chapter.title in extract_wiki_links(other.content):
+            db.add(ChapterLink(from_chapter_id=other.id, to_chapter_id=chapter.id))
+
+
 def create_chapter_record(db: Session, *, notebook_id: str, title: str, content: str = "") -> Chapter:
     """Shared chapter-creation path: insert, sync wiki-links, reindex for
     search and tags. Used by the plain create_chapter endpoint below and
@@ -180,6 +219,7 @@ def create_chapter_record(db: Session, *, notebook_id: str, title: str, content:
     db.commit()
     db.refresh(ch)
     _sync_wiki_links(db, ch)
+    _backfill_incoming_links(db, ch)
     _reindex_chapter(db, ch)
     reindex_tags(db, taggable_type="chapter", taggable_id=ch.id, content=ch.content)
     db.commit()
@@ -311,6 +351,9 @@ def update_chapter(chapter_id: str, payload: ChapterUpdate, db: Session = Depend
     if "content" in data:
         _sync_wiki_links(db, ch)
         reindex_tags(db, taggable_type="chapter", taggable_id=ch.id, content=ch.content)
+
+    if "title" in data:
+        _backfill_incoming_links(db, ch)
 
     if "content" in data or "title" in data:
         _reindex_chapter(db, ch)

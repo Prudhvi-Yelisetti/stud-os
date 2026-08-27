@@ -113,3 +113,71 @@ def test_permanently_deleting_a_project_also_removes_its_attachments(client, tmp
     assert resp.status_code == 204
 
     assert os.listdir(tmp_path) == [], "file was left orphaned on disk"
+
+
+def test_trashing_a_notebook_cascades_to_its_chapters(client):
+    """Regression test: trashing a notebook used to leave its chapters
+    with is_trashed=False -- orphaned rather than trashed, so they stayed
+    directly fetchable, kept showing up in the whole-graph view and
+    semantic search, and never appeared in Trash to be restored or
+    purged. Trashing the notebook should trash its chapters too."""
+    nb = client.post("/api/notebooks", json={"title": "NB"}).json()
+    ch = client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "C"}).json()
+
+    client.delete(f"/api/notebooks/{nb['id']}")
+
+    assert client.get(f"/api/notebooks/chapters/{ch['id']}").status_code == 404
+    trash = client.get("/api/trash").json()
+    assert any(t["type"] == "chapter" and t["id"] == ch["id"] for t in trash)
+
+
+def test_restoring_a_notebook_cascades_to_chapters_it_trashed(client):
+    nb = client.post("/api/notebooks", json={"title": "NB"}).json()
+    ch = client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "C"}).json()
+
+    client.delete(f"/api/notebooks/{nb['id']}")
+    client.post(f"/api/trash/notebook/{nb['id']}/restore")
+
+    assert client.get(f"/api/notebooks/chapters/{ch['id']}").status_code == 200
+    trash = client.get("/api/trash").json()
+    assert not any(t["type"] == "chapter" and t["id"] == ch["id"] for t in trash)
+
+
+def test_restoring_a_notebook_does_not_resurrect_an_independently_trashed_chapter(client):
+    """A chapter trashed on its own, before the notebook was trashed,
+    should stay in Trash when the notebook is later restored -- only
+    chapters the notebook's own trash cascaded onto come back with it."""
+    nb = client.post("/api/notebooks", json={"title": "NB"}).json()
+    ch1 = client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "C1"}).json()
+    ch2 = client.post(f"/api/notebooks/{nb['id']}/chapters", json={"title": "C2"}).json()
+
+    client.delete(f"/api/notebooks/chapters/{ch1['id']}")  # independently trashed first
+    client.delete(f"/api/notebooks/{nb['id']}")  # then the whole notebook
+    client.post(f"/api/trash/notebook/{nb['id']}/restore")
+
+    assert client.get(f"/api/notebooks/chapters/{ch2['id']}").status_code == 200, "cascaded chapter should return"
+    assert client.get(f"/api/notebooks/chapters/{ch1['id']}").status_code == 404, "independent trash should persist"
+
+
+def test_trashing_a_project_cascades_to_its_tasks(client):
+    """Same bug, one level up: projects -> tasks."""
+    proj = client.post("/api/projects", json={"title": "P"}).json()
+    task = client.post("/api/tasks", json={"title": "T", "project_id": proj["id"]}).json()
+
+    client.delete(f"/api/projects/{proj['id']}")
+
+    assert not any(t["id"] == task["id"] for t in client.get("/api/tasks").json())
+    trash = client.get("/api/trash").json()
+    assert any(t["type"] == "task" and t["id"] == task["id"] for t in trash)
+
+
+def test_restoring_a_project_cascades_to_tasks_it_trashed(client):
+    proj = client.post("/api/projects", json={"title": "P"}).json()
+    task = client.post("/api/tasks", json={"title": "T", "project_id": proj["id"]}).json()
+
+    client.delete(f"/api/projects/{proj['id']}")
+    client.post(f"/api/trash/project/{proj['id']}/restore")
+
+    assert any(t["id"] == task["id"] for t in client.get("/api/tasks").json())
+    trash = client.get("/api/trash").json()
+    assert not any(t["type"] == "task" and t["id"] == task["id"] for t in trash)
