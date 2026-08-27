@@ -13,6 +13,7 @@ import { VersionHistoryPanel } from './VersionHistoryPanel'
 import { RelatedNotesPanel } from './RelatedNotesPanel'
 import { QuizPanel } from './QuizPanel'
 import { OutlineSidebar } from './OutlineSidebar'
+import { LocalGraphModal } from '../graph/LocalGraphModal'
 
 export function ChapterEditor({
   chapterId,
@@ -33,6 +34,7 @@ export function ChapterEditor({
   const [linkQueryStart, setLinkQueryStart] = useState<number | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [showSidePanel, setShowSidePanel] = useState(false)
+  const [showLocalGraph, setShowLocalGraph] = useState(false)
   const editorRef = useRef<LiveMarkdownEditorHandle>(null)
   const previewRef = useRef<HTMLDivElement>(null)
 
@@ -257,6 +259,13 @@ export function ChapterEditor({
               🔗
             </button>
             <button
+              onClick={() => setShowLocalGraph(true)}
+              className="text-sm text-neutral-500 hover:text-neutral-300"
+              title="Local graph"
+            >
+              🕸️
+            </button>
+            <button
               onClick={() => togglePin.mutate(!chapter.pinned)}
               className={`text-sm ${chapter.pinned ? 'text-yellow-400' : 'text-neutral-600 hover:text-neutral-400'}`}
               title={chapter.pinned ? 'Unpin' : 'Pin'}
@@ -336,6 +345,13 @@ export function ChapterEditor({
         </div>
       )}
       {showHistory && <VersionHistoryPanel chapterId={chapterId} onClose={() => setShowHistory(false)} />}
+      {showLocalGraph && (
+        <LocalGraphModal
+          focalId={chapterId}
+          onClose={() => setShowLocalGraph(false)}
+          onNavigateChapter={onNavigate}
+        />
+      )}
     </div>
   )
 }
