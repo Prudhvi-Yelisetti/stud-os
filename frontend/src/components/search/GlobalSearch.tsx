@@ -63,7 +63,7 @@ export function GlobalSearch() {
           setOpen(true)
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Search everything... (⌘K)"
+        placeholder="Search everything..."
         title="Operators: tag:x, -tag:x, notebook:x, -notebook:x, -word"
         className="w-80 rounded bg-neutral-900 px-3 py-1.5 text-sm outline-none placeholder:text-neutral-600"
       />

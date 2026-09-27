@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { GamificationWidget } from '../gamification/GamificationWidget'
 import { GlobalSearch } from '../search/GlobalSearch'
+import { CommandPalette } from '../shared/CommandPalette'
 import { dailyNotesApi } from '../../lib/dailyNotes'
 
 const navItems = [
@@ -86,6 +87,7 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <CommandPalette />
     </div>
   )
 }
