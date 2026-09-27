@@ -3,6 +3,7 @@ import { marked } from 'marked'
 import '../../lib/markdownExtensions' // side effect: registers callout block extension
 import { preprocessFootnotes, annotateFootnoteAnchors } from '../../lib/footnotes'
 import { annotateHeadingIds } from '../../lib/outline'
+import { parseLinkTarget } from '../../lib/blockRefs'
 import type { ResolvedChapterLink } from '../../lib/useResolvedWikiLinks'
 
 const WIKI_LINK_PATTERN = /\[\[([^\[\]]+)\]\]/g
@@ -53,7 +54,11 @@ export function WikiLinkText({
     // resolution status into the URL scheme so we can style + intercept
     // clicks after render without re-parsing the markdown ourselves.
     withPlaceholders = withPlaceholders.replace(WIKI_LINK_PATTERN, (_match, rawTitle) => {
-      const title = rawTitle.trim()
+      // Strip a "#^block-id" suffix before resolving/displaying -- see
+      // lib/blockRefs.ts. The visible link text keeps just the title
+      // (Obsidian does the same -- the block-id marker is plumbing, not
+      // something a reader needs to see).
+      const { title } = parseLinkTarget(rawTitle.trim())
       const scheme = resolvedLinks.get(title) ? 'wikilink-resolved' : 'wikilink-unresolved'
       return `[${title}](${scheme}:${encodeURIComponent(title)})`
     })

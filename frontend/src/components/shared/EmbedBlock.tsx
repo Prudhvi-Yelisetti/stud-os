@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { notebooksApi } from '../../lib/notebooks'
 import { stripFrontmatter } from '../../lib/frontmatter'
+import { parseLinkTarget, getBlockText } from '../../lib/blockRefs'
 import { ContentWithEmbeds } from './ContentWithEmbeds'
 import type { ResolvedChapterLink } from '../../lib/useResolvedWikiLinks'
 
@@ -13,9 +14,15 @@ const MAX_EMBED_DEPTH = 3
  * at MAX_EMBED_DEPTH so a circular embed (A embeds B embeds A) can't
  * recurse forever; past the cap it falls back to a plain link instead
  * of expanding further.
+ *
+ * `title` may carry a block reference (`Title#^block-id`, see
+ * lib/blockRefs.ts) -- when present, only that one block's text is
+ * rendered instead of the whole note, which is the actual point of a
+ * block-reference embed (transcluding one paragraph, not the whole
+ * page).
  */
 export function EmbedBlock({
-  title,
+  title: rawTitle,
   depth,
   onNavigate,
   onTagClick,
@@ -25,6 +32,7 @@ export function EmbedBlock({
   onNavigate: (resolved: ResolvedChapterLink) => void
   onTagClick?: (tag: string) => void
 }) {
+  const { title, blockId } = parseLinkTarget(rawTitle)
   const { data: matches, isLoading } = useQuery({
     queryKey: ['chapter-title-match', title],
     queryFn: () => notebooksApi.searchChapterTitles(title),
@@ -45,7 +53,7 @@ export function EmbedBlock({
   if (!match) {
     return (
       <div className="my-2 rounded border border-dashed border-neutral-700 px-3 py-2 text-sm text-neutral-500">
-        ![[{title}]] — no note titled "{title}" yet.
+        ![[{rawTitle}]] — no note titled "{title}" yet.
       </div>
     )
   }
@@ -61,6 +69,9 @@ export function EmbedBlock({
     )
   }
 
+  const blockText = blockId && chapter ? getBlockText(stripFrontmatter(chapter.content), blockId) : null
+  const blockNotFound = blockId && chapter && blockText === null
+
   return (
     <div className="my-2 rounded border border-neutral-800 bg-neutral-950 px-3 py-2">
       <button
@@ -69,17 +80,20 @@ export function EmbedBlock({
         title="Open this note"
       >
         {title}
+        {blockId && <span className="text-neutral-700"> ^{blockId}</span>}
       </button>
-      {chapter ? (
+      {!chapter ? (
+        <p className="text-xs text-neutral-600">Loading…</p>
+      ) : blockNotFound ? (
+        <p className="text-sm text-neutral-500">No block "^{blockId}" found in this note.</p>
+      ) : (
         <ContentWithEmbeds
-          content={stripFrontmatter(chapter.content)}
+          content={blockId ? (blockText ?? '') : stripFrontmatter(chapter.content)}
           depth={depth + 1}
           onNavigate={onNavigate}
           onTagClick={onTagClick}
           emptyPlaceholder="(empty note)"
         />
-      ) : (
-        <p className="text-xs text-neutral-600">Loading…</p>
       )}
     </div>
   )

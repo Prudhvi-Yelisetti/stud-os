@@ -3,6 +3,8 @@
  * and autocomplete, not as the source of truth (the backend re-derives
  * links from content on every save regardless of what the client sends).
  */
+import { parseLinkTarget } from './blockRefs'
+
 const WIKI_LINK_PATTERN = /\[\[([^[\]]+)\]\]/g
 
 export interface WikiLinkPart {
@@ -16,7 +18,11 @@ export function splitByWikiLinks(content: string): WikiLinkPart[] {
   for (const match of content.matchAll(WIKI_LINK_PATTERN)) {
     const index = match.index ?? 0
     if (index > lastIndex) parts.push({ type: 'text', content: content.slice(lastIndex, index) })
-    parts.push({ type: 'link', content: match[1].trim() })
+    // Strip a "#^block-id" block-reference suffix before treating this as
+    // a chapter title -- otherwise a block-reference link would never
+    // resolve, since no chapter is literally titled "Note#^abc123".
+    const { title } = parseLinkTarget(match[1].trim())
+    parts.push({ type: 'link', content: title })
     lastIndex = index + match[0].length
   }
   if (lastIndex < content.length) parts.push({ type: 'text', content: content.slice(lastIndex) })
